@@ -51,7 +51,7 @@ async function validatePasswordAgainstPolicy(password) {
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(session({
-    secret: 'secret-key',
+    secret: process.env.SESSION_SECRET || 'change-me-in-production',
     resave: false,
     saveUninitialized: true,
 }));
@@ -1241,7 +1241,7 @@ app.get('/api/share/:token/file', async (req, res) => {
 // Start server - supports two modes:
 // 1) If USE_NGINX=true (env) we assume Nginx handles TLS and proxy to this app on `port` (default 3000)
 // 2) Otherwise, if certs exist, start HTTPS on 443 and an HTTP->HTTPS redirect on 80
-const port = 3000;
+const port = parseInt(process.env.PORT || '3000', 10);
 const useNginx = true; // Force nginx reverse proxy mode
 
 // Start server after DB initialization

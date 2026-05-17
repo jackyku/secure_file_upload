@@ -31,33 +31,42 @@ A self-hosted file upload and sharing platform with document preview, password-p
 
 ## Quick Install — One Command
 
-Run the installer directly from GitHub in a single command:
+The fastest way to install the app and configure Nginx is with one command. It will install Node.js, npm dependencies, create a fresh app database, create `uploads/` directories, and register the service.
 
 ```bash
+sudo apt-get update && sudo apt-get install -y curl nginx certbot python3-certbot-nginx
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)"
+sudo cp nginx-fileupload.conf /etc/nginx/sites-available/web-upload
+sudo ln -sf /etc/nginx/sites-available/web-upload /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-If you prefer to clone first, use:
+After install, the default admin account is:
 
-```bash
-git clone https://github.com/jackyku/secure_file_upload.git
-cd secure_file_upload
-sudo bash install.sh
-```
+- username: `admin`
+- password: `P@ssw0rd`
 
-The script will:
+The installer will also:
 1. Install Node.js 20 LTS (via NodeSource)
 2. Install all npm dependencies
-3. Generate a secure `.env` (random session secret, configurable port)
-4. Create the `uploads/` directories
-5. Walk you through creating the first **admin account**
-6. Register and start a **systemd service** that auto-starts on reboot
+3. Generate a secure `.env` with a random `SESSION_SECRET`
+4. Remove any existing `app.db` and uploaded test files from the repository
+5. Create clean `uploads/` and `uploads_tmp/` directories
+6. Create the default admin account `admin` with password `P@ssw0rd`
+7. Register and start a systemd service that auto-starts on reboot
 
 When finished you will see:
 
 ```
 ✓  Installation Complete!
 App running at: http://localhost:3000
+```
+
+If you prefer to install without Nginx, use the one-command installer alone:
+
+```bash
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)"
 ```
 
 ---
@@ -77,8 +86,8 @@ node --version   # should print v20.x.x
 ### 2 — Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-cd YOUR_REPO
+git clone https://github.com/jackyku/secure_file_upload.git
+cd secure_file_upload
 ```
 
 ### 3 — Install dependencies
@@ -114,6 +123,18 @@ node setup-admin.js
 ```
 
 You will be prompted for a username and password.
+
+If you want to create the default admin account instead, run:
+
+```bash
+DEFAULT_ADMIN_PASSWORD=P@ssw0rd node setup-admin.js
+```
+
+or:
+
+```bash
+node setup-admin.js --default
+```
 
 ### 6 — Create upload directories
 
@@ -387,7 +408,8 @@ sudo systemctl restart web-upload
 - The `.env` file is set to `chmod 600` (owner read/write only) by the installer
 - `uploads/` is served statically — do not store sensitive files outside a user directory
 - Enable HTTPS (Let's Encrypt) before exposing to the public internet
-- The admin account has no default password — you set it during `setup-admin.js`
+- The one-command installer creates a default admin account using `admin` / `P@ssw0rd`
+- Change the default admin password immediately after first login
 
 ---
 

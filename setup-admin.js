@@ -41,7 +41,45 @@ function ask(question, hidden = false) {
     });
 }
 
+async function createDefaultAdmin() {
+    const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'P@ssw0rd';
+
+    console.log('\n╔══════════════════════════════════════╗');
+    console.log('║       Web Upload — Admin Setup       ║');
+    console.log('╚══════════════════════════════════════╝\n');
+    console.log(`Creating default admin account: ${username}`);
+
+    if (!username) {
+        console.error('Username cannot be empty.');
+        process.exit(1);
+    }
+    if (!password || password.length < 4) {
+        console.error('Admin password must be at least 4 characters.');
+        process.exit(1);
+    }
+
+    const existing = db.getUser(username);
+    if (existing) {
+        console.log(`\n⚠  User "${username}" already exists (role: ${existing.role}).`);
+        console.log('   Use the admin panel to change the password.\n');
+        return;
+    }
+
+    db.createUser(username, password, 'admin', 999, 'setup');
+
+    console.log(`\n✓  Admin user "${username}" created successfully!`);
+    console.log(`   Login at: http://localhost:${process.env.PORT || 3000}/login.html`);
+    console.log(`   Default password: ${password}\n`);
+}
+
 async function main() {
+    const defaultMode = process.argv.includes('--default') || process.env.DEFAULT_ADMIN_PASSWORD;
+    if (defaultMode) {
+        await createDefaultAdmin();
+        process.exit(0);
+    }
+
     console.log('\n╔══════════════════════════════════════╗');
     console.log('║       Web Upload — Admin Setup       ║');
     console.log('╚══════════════════════════════════════╝\n');

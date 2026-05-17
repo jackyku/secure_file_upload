@@ -103,8 +103,16 @@ fi
 set -a; source "$ENV_FILE"; set +a
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "5/7  Creating upload directories"
+step "5/7  Preparing clean application state"
 # ─────────────────────────────────────────────────────────────────────────────
+if [[ -f "$APP_DIR/app.db" ]]; then
+    warn "Existing app.db detected; removing previous database state."
+    rm -f "$APP_DIR/app.db"
+fi
+if [[ -d "$APP_DIR/uploads" || -d "$APP_DIR/uploads_tmp" ]]; then
+    warn "Clearing existing upload directories from development state."
+    rm -rf "$APP_DIR/uploads" "$APP_DIR/uploads_tmp"
+fi
 mkdir -p "$APP_DIR/uploads" "$APP_DIR/uploads_tmp"
 success "Upload directories ready"
 
@@ -112,7 +120,8 @@ success "Upload directories ready"
 step "6/7  Creating admin account"
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-DATABASE_URL="" node "$APP_DIR/setup-admin.js"
+DEFAULT_ADMIN_USERNAME="admin" DEFAULT_ADMIN_PASSWORD="P@ssw0rd" DATABASE_URL="" node "$APP_DIR/setup-admin.js"
+success "Default admin account created: admin / P@ssw0rd"
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "7/7  Setting up systemd service"

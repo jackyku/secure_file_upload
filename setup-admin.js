@@ -66,9 +66,9 @@ async function createDefaultAdmin() {
         return;
     }
 
-    db.createUser(username, password, 'admin', 999, 'setup');
+    db.createUser(username, password, 'superadmin', 999, 'setup');
 
-    console.log(`\n✓  Admin user "${username}" created successfully!`);
+    console.log(`\n✓  Super Admin user "${username}" created successfully!`);
     console.log(`   Login at: http://localhost:${process.env.PORT || 3000}/login.html`);
     console.log(`   Default password: ${password}\n`);
 }
@@ -101,9 +101,9 @@ async function main() {
     const confirm = await ask('Confirm password: ', true);
     if (password !== confirm) { console.error('\nPasswords do not match.'); process.exit(1); }
 
-    db.createUser(username, password, 'admin', 999, 'setup');
+    db.createUser(username, password, 'superadmin', 999, 'setup');
 
-    console.log(`\n✓  Admin user "${username}" created successfully!`);
+    console.log(`\n✓  Super Admin user "${username}" created successfully!`);
     console.log(`   Login at: http://localhost:${process.env.PORT || 3000}/login.html\n`);
     rl.close();
 }

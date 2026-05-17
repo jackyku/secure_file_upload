@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 #  Web Upload Server — One-Command Installer
-#  Supports: Ubuntu 20.04/22.04/24.04, Debian 11/12
+#  Supports: Ubuntu 20.04 / 22.04 / 24.04, Debian 11 / 12
 #
-#  Usage (from project directory):
-#    bash install.sh
+#  Run directly from GitHub (recommended):
+#    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)"
 #
-#  Or directly from GitHub:
-#    bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/install.sh)
+#  Or from a local clone:
+#    sudo bash install.sh
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -23,113 +23,118 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}${BLUE}▶ $*${NC}"; }
 
 # ── Config ────────────────────────────────────────────────────────────────────
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL="https://github.com/jackyku/secure_file_upload.git"
+INSTALL_DIR="/opt/web-upload"
 SERVICE_NAME="web-upload"
-NODE_MAJOR="20"          # LTS version
+NODE_MAJOR="20"
 
 # ── Root check ────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
-    error "Please run as root or with sudo:\n  sudo bash install.sh"
+    error "Please run as root:\n  sudo bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)\""
 fi
 
 # ── OS check ──────────────────────────────────────────────────────────────────
 if ! command -v apt-get &>/dev/null; then
-    error "This installer supports Debian/Ubuntu only.\nFor other distros, follow the manual installation steps in README.md."
+    error "This installer supports Debian/Ubuntu only.\nFor other distros, follow the manual steps in README.md."
 fi
 
 echo -e "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}   Web Upload Server — Automated Installer   ${NC}"
-echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-info "App directory: $APP_DIR"
+echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "1/7  Installing system dependencies"
+step "1/8  Installing system dependencies"
 # ─────────────────────────────────────────────────────────────────────────────
 apt-get update -qq
-apt-get install -y -qq curl gnupg ca-certificates lsb-release build-essential
-success "System packages installed"
+apt-get install -y -qq curl git gnupg ca-certificates lsb-release build-essential
+success "System packages ready"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "2/7  Installing Node.js ${NODE_MAJOR} LTS"
+step "2/8  Installing Node.js ${NODE_MAJOR} LTS"
 # ─────────────────────────────────────────────────────────────────────────────
 if node --version 2>/dev/null | grep -q "^v${NODE_MAJOR}"; then
     success "Node.js $(node --version) already installed"
 else
-    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - -qq
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
     apt-get install -y -qq nodejs
     success "Node.js $(node --version) installed"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "3/7  Installing npm dependencies"
+step "3/8  Cloning / updating repository"
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -d "$INSTALL_DIR/.git" ]]; then
+    info "Repository already exists — pulling latest changes"
+    git -C "$INSTALL_DIR" pull --quiet
+    success "Repository updated"
+else
+    git clone --quiet "$REPO_URL" "$INSTALL_DIR"
+    success "Repository cloned to $INSTALL_DIR"
+fi
+APP_DIR="$INSTALL_DIR"
+
+# ─────────────────────────────────────────────────────────────────────────────
+step "4/8  Installing npm dependencies"
 # ─────────────────────────────────────────────────────────────────────────────
 cd "$APP_DIR"
 npm install --omit=dev --silent
 success "npm packages installed"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "4/7  Creating environment configuration"
+step "5/8  Creating environment configuration"
 # ─────────────────────────────────────────────────────────────────────────────
 ENV_FILE="$APP_DIR/.env"
 if [[ -f "$ENV_FILE" ]]; then
-    warn ".env already exists — skipping (delete it and re-run to regenerate)"
+    warn ".env already exists — skipping (delete it to regenerate)"
 else
-    # Generate a cryptographically random session secret
     SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")
 
-    echo "Enter the port the app should listen on (default: 3000):"
-    read -r -p "Port [3000]: " APP_PORT
+    read -r -p "Port for the app [3000]: " APP_PORT
     APP_PORT="${APP_PORT:-3000}"
 
     echo ""
-    echo "Use PostgreSQL instead of SQLite? (leave blank for SQLite — recommended)"
-    read -r -p "PostgreSQL URL [blank = SQLite]: " DB_URL
+    echo "PostgreSQL URL (leave blank to use SQLite — recommended):"
+    read -r -p "DATABASE_URL [blank = SQLite]: " DB_URL
 
-    cat > "$ENV_FILE" <<EOF
+    cat > "$ENV_FILE" <<ENVEOF
 # Generated by install.sh on $(date)
 SESSION_SECRET=${SESSION_SECRET}
 PORT=${APP_PORT}
-EOF
+ENVEOF
 
-    if [[ -n "$DB_URL" ]]; then
+    if [[ -n "${DB_URL:-}" ]]; then
         echo "DATABASE_URL=${DB_URL}" >> "$ENV_FILE"
     fi
 
     chmod 600 "$ENV_FILE"
-    success ".env created (permissions set to 600)"
+    success ".env created (chmod 600)"
 fi
 
-# Source .env so setup-admin can use PORT
 set -a; source "$ENV_FILE"; set +a
+APP_PORT="${PORT:-3000}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "5/7  Preparing clean application state"
+step "6/8  Preparing application directories"
 # ─────────────────────────────────────────────────────────────────────────────
-if [[ -f "$APP_DIR/app.db" ]]; then
-    warn "Existing app.db detected; removing previous database state."
-    rm -f "$APP_DIR/app.db"
-fi
-if [[ -d "$APP_DIR/uploads" || -d "$APP_DIR/uploads_tmp" ]]; then
-    warn "Clearing existing upload directories from development state."
-    rm -rf "$APP_DIR/uploads" "$APP_DIR/uploads_tmp"
-fi
+# Remove dev DB / uploads that may have been committed accidentally
+[[ -f "$APP_DIR/app.db" ]]       && rm -f "$APP_DIR/app.db"       && warn "Removed dev app.db"
+[[ -d "$APP_DIR/uploads" ]]      && rm -rf "$APP_DIR/uploads"      && warn "Removed dev uploads/"
+[[ -d "$APP_DIR/uploads_tmp" ]]  && rm -rf "$APP_DIR/uploads_tmp"  && warn "Removed dev uploads_tmp/"
 mkdir -p "$APP_DIR/uploads" "$APP_DIR/uploads_tmp"
 success "Upload directories ready"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "6/7  Creating admin account"
+step "7/8  Creating admin account"
 # ─────────────────────────────────────────────────────────────────────────────
-echo ""
-DEFAULT_ADMIN_USERNAME="admin" DEFAULT_ADMIN_PASSWORD="P@ssw0rd" DATABASE_URL="" node "$APP_DIR/setup-admin.js"
-success "Default admin account created: admin / P@ssw0rd"
+DATABASE_URL="" DEFAULT_ADMIN_USERNAME="admin" DEFAULT_ADMIN_PASSWORD="P@ssw0rd" \
+    node "$APP_DIR/setup-admin.js"
+success "Default admin: admin / P@ssw0rd  ← change this after first login"
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "7/7  Setting up systemd service"
+step "8/8  Setting up systemd service"
 # ─────────────────────────────────────────────────────────────────────────────
-APP_PORT="${PORT:-3000}"
 NODE_BIN="$(which node)"
-
-cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
+cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<SVCEOF
 [Unit]
 Description=Web Upload Server
 After=network.target
@@ -144,14 +149,12 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${SERVICE_NAME}
 EnvironmentFile=${APP_DIR}/.env
-
-# Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVCEOF
 
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}" --quiet
@@ -159,26 +162,95 @@ systemctl restart "${SERVICE_NAME}"
 sleep 2
 
 if systemctl is-active --quiet "${SERVICE_NAME}"; then
-    success "Service '${SERVICE_NAME}' is running"
+    success "Service '${SERVICE_NAME}' is running on port ${APP_PORT}"
 else
-    warn "Service failed to start. Check logs: journalctl -u ${SERVICE_NAME} -n 50"
+    warn "Service failed to start — check: journalctl -u ${SERVICE_NAME} -n 50"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Done
+# Optional: Nginx setup
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}Optional: Set up Nginx reverse proxy?${NC}"
+read -r -p "Configure Nginx now? [y/N]: " SETUP_NGINX
+SETUP_NGINX="${SETUP_NGINX:-n}"
+
+if [[ "${SETUP_NGINX,,}" == "y" ]]; then
+    if ! command -v nginx &>/dev/null; then
+        info "Installing Nginx..."
+        apt-get install -y -qq nginx
+    fi
+
+    echo ""
+    echo "Enter your server's domain name or IP address."
+    echo "Examples:  myapp.example.com   OR   192.168.1.100"
+    read -r -p "Domain / IP: " SERVER_NAME
+    SERVER_NAME="${SERVER_NAME:-_}"
+
+    NGINX_CONF="/etc/nginx/sites-available/${SERVICE_NAME}"
+    cat > "$NGINX_CONF" <<NGINXEOF
+server {
+    listen 80;
+    server_name ${SERVER_NAME};
+
+    # Allow uploads up to 1 TB
+    client_max_body_size 0;
+
+    # Large upload timeouts
+    proxy_read_timeout  3600;
+    proxy_send_timeout  3600;
+
+    location / {
+        proxy_pass         http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade \$http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+NGINXEOF
+
+    ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
+
+    # Remove default nginx site to avoid conflicts
+    rm -f /etc/nginx/sites-enabled/default
+
+    if nginx -t 2>/dev/null; then
+        systemctl reload nginx
+        success "Nginx configured for ${SERVER_NAME}"
+
+        # Offer Let's Encrypt if a real domain was given
+        if [[ "$SERVER_NAME" != "_" && "$SERVER_NAME" != "localhost" ]] && ! [[ "$SERVER_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo ""
+            read -r -p "Set up free HTTPS with Let's Encrypt for ${SERVER_NAME}? [y/N]: " SETUP_SSL
+            if [[ "${SETUP_SSL,,}" == "y" ]]; then
+                apt-get install -y -qq certbot python3-certbot-nginx
+                certbot --nginx -d "$SERVER_NAME" --non-interactive --agree-tos --register-unsafely-without-email || \
+                    warn "Certbot failed — run manually: certbot --nginx -d ${SERVER_NAME}"
+            fi
+        fi
+    else
+        warn "Nginx config test failed — check: nginx -t"
+    fi
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}${GREEN}   ✓  Installation Complete!                 ${NC}"
 echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  App running at:  ${CYAN}http://localhost:${APP_PORT}${NC}"
+echo -e "  Installed to:  ${CYAN}${APP_DIR}${NC}"
+echo -e "  App port:      ${CYAN}${APP_PORT}${NC}"
+echo -e "  Admin login:   ${YELLOW}admin / P@ssw0rd${NC}  ← change immediately!"
 echo ""
 echo -e "  ${BOLD}Useful commands:${NC}"
-echo -e "    View logs:      journalctl -u ${SERVICE_NAME} -f"
-echo -e "    Restart app:    systemctl restart ${SERVICE_NAME}"
-echo -e "    Stop app:       systemctl stop ${SERVICE_NAME}"
-echo ""
-echo -e "  ${YELLOW}Next step (optional):${NC} Set up Nginx as a reverse proxy."
-echo -e "  See README.md for the Nginx + SSL (Let's Encrypt) configuration."
+echo -e "    Live logs:    journalctl -u ${SERVICE_NAME} -f"
+echo -e "    Restart:      systemctl restart ${SERVICE_NAME}"
+echo -e "    Stop:         systemctl stop ${SERVICE_NAME}"
+echo -e "    App files:    ${APP_DIR}"
 echo ""

@@ -31,42 +31,38 @@ A self-hosted file upload and sharing platform with document preview, password-p
 
 ## Quick Install — One Command
 
-The fastest way to install the app and configure Nginx is with one command. It will install Node.js, npm dependencies, create a fresh app database, create `uploads/` directories, and register the service.
+Run this single command on your Linux server. The installer handles everything interactively:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y curl nginx certbot python3-certbot-nginx
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)"
-sudo cp nginx-fileupload.conf /etc/nginx/sites-available/web-upload
-sudo ln -sf /etc/nginx/sites-available/web-upload /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
 ```
 
-After install, the default admin account is:
+The installer will:
+1. Install `git`, `curl`, `build-essential` system packages
+2. Install Node.js 20 LTS via NodeSource
+3. Clone this repository to `/opt/web-upload`
+4. Install npm dependencies
+5. Generate a secure `.env` with a random `SESSION_SECRET`
+6. Create clean `uploads/` and `uploads_tmp/` directories
+7. Create the default admin account (`admin` / `P@ssw0rd`)
+8. Register and start a **systemd service** that auto-starts on reboot
+9. *(Optional)* Configure Nginx reverse proxy — the installer will ask for your domain/IP
+10. *(Optional)* Set up free HTTPS via Let's Encrypt — offered automatically for real domains
 
-- username: `admin`
-- password: `P@ssw0rd`
+**Default admin credentials** (change immediately after first login):
 
-The installer will also:
-1. Install Node.js 20 LTS (via NodeSource)
-2. Install all npm dependencies
-3. Generate a secure `.env` with a random `SESSION_SECRET`
-4. Remove any existing `app.db` and uploaded test files from the repository
-5. Create clean `uploads/` and `uploads_tmp/` directories
-6. Create the default admin account `admin` with password `P@ssw0rd`
-7. Register and start a systemd service that auto-starts on reboot
+| Field | Value |
+|-------|-------|
+| Username | `admin` |
+| Password | `P@ssw0rd` |
 
 When finished you will see:
 
 ```
 ✓  Installation Complete!
-App running at: http://localhost:3000
-```
-
-If you prefer to install without Nginx, use the one-command installer alone:
-
-```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)"
+Installed to:  /opt/web-upload
+App port:      3000
+Admin login:   admin / P@ssw0rd  ← change immediately!
 ```
 
 ---

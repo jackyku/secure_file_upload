@@ -31,11 +31,17 @@ A self-hosted file upload and sharing platform with document preview, password-p
 
 ## Quick Install — One Command
 
-Clone the repo and run the installer as root:
+Run the installer directly from GitHub in a single command:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-cd YOUR_REPO
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jackyku/secure_file_upload/main/install.sh)"
+```
+
+If you prefer to clone first, use:
+
+```bash
+git clone https://github.com/jackyku/secure_file_upload.git
+cd secure_file_upload
 sudo bash install.sh
 ```
 

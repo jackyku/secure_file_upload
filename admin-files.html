@@ -9,8 +9,119 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="/branding.js"></script>
     <style>
-        /* Preview modal */
+        /* ── User card grid ─────────────────────────────────────── */
+        .user-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .user-card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 2px 8px rgba(15,23,36,0.05);
+            transition: box-shadow .15s, transform .15s;
+        }
+        .user-card:hover { box-shadow: 0 6px 20px rgba(15,23,36,0.10); transform: translateY(-2px); }
+        .user-card-top { display: flex; align-items: center; gap: 12px; }
+        .user-avatar {
+            width: 46px; height: 46px; border-radius: 50%;
+            background: linear-gradient(135deg,var(--accent-1),var(--accent-2));
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 18px; flex-shrink: 0;
+        }
+        .user-card-info { flex: 1; min-width: 0; }
+        .user-card-info h3 { margin: 0 0 3px; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .role-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+        .role-user       { background:#f3f4f6; color:#6b7280; }
+        .role-admin      { background:#dbeafe; color:#1d4ed8; }
+        .role-superadmin { background:#fef3c7; color:#92400e; }
+        .user-card-stats { display: flex; gap: 12px; font-size: 13px; color: var(--muted); }
+        .user-card-stats span { display: flex; align-items: center; gap: 5px; }
+        .open-files-btn {
+            width: 100%; padding: 9px;
+            background: linear-gradient(90deg,var(--accent-1),var(--accent-2));
+            color: #fff; border: none; border-radius: 10px; cursor: pointer;
+            font-weight: 600; font-size: 14px; display: flex; align-items: center;
+            justify-content: center; gap: 8px;
+            transition: transform .12s, box-shadow .12s;
+        }
+        .open-files-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(79,142,247,0.25); }
+        .open-files-btn:disabled { opacity: .5; cursor: default; transform: none; }
+
+        /* ── File drawer modal ──────────────────────────────────── */
+        #fileDrawer {
+            position: fixed; inset: 0;
+            display: none; align-items: stretch; justify-content: flex-end;
+            background: rgba(2,6,23,0.45);
+            z-index: 900;
+        }
+        #fileDrawer.show { display: flex; }
+        .drawer-panel {
+            width: min(560px, 100vw);
+            background: #fff;
+            display: flex; flex-direction: column;
+            box-shadow: -8px 0 32px rgba(15,23,36,0.14);
+            animation: slideIn .22s ease;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .drawer-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 18px 20px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg,#f8faff,#fff);
+        }
+        .drawer-avatar {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: linear-gradient(135deg,var(--accent-1),var(--accent-2));
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 16px; flex-shrink: 0;
+        }
+        .drawer-header h3 { margin: 0; font-size: 16px; flex: 1; }
+        .drawer-header p  { margin: 0; font-size: 12px; color: var(--muted); }
+        .drawer-close {
+            background: none; border: none; font-size: 20px; cursor: pointer;
+            color: var(--muted); padding: 6px 8px; border-radius: 8px; box-shadow: none; flex-shrink: 0;
+        }
+        .drawer-close:hover { background: var(--border); transform: none; }
+        .drawer-search {
+            padding: 12px 16px; border-bottom: 1px solid var(--border);
+        }
+        .drawer-search input {
+            width: 100%; padding: 8px 12px; border-radius: 8px;
+            border: 1px solid var(--border); font-size: 13px;
+        }
+        .drawer-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+        .drawer-empty { text-align: center; padding: 48px 16px; color: var(--muted); }
+        .drawer-empty i { font-size: 36px; display: block; margin-bottom: 10px; }
+
+        /* file rows inside drawer */
+        .dfile-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 16px; border-bottom: 1px solid rgba(15,23,36,0.05);
+            transition: background .12s;
+        }
+        .dfile-item:hover { background: rgba(79,142,247,0.04); }
+        .dfile-icon { font-size: 20px; color: var(--accent-1); flex-shrink: 0; width: 22px; text-align: center; }
+        .dfile-name {
+            flex: 1; min-width: 0; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; font-size: 13px;
+        }
+        .dfile-name a { color: var(--text); text-decoration: none; }
+        .dfile-name a:hover { color: var(--accent-1); text-decoration: underline; }
+        .dfile-actions { display: flex; gap: 5px; flex-shrink: 0; }
+        .btn-xs { padding: 5px 8px; font-size: 11px; border-radius: 7px; }
+        .btn-preview { background: linear-gradient(90deg,#6366f1,#8b5cf6); }
+        .btn-share   { background: linear-gradient(90deg,#0ea5e9,#06b6d4); }
+
+        /* ── Preview modal ──────────────────────────────────────── */
+        #previewModal { z-index: 1100; }
         #previewModal .modal-content {
             max-width: 920px; width: 96vw; max-height: 88vh;
             display: flex; flex-direction: column; padding: 0; overflow: hidden;
@@ -30,7 +141,9 @@
         .pptx-slide { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; background: #fff; }
         .pptx-slide h4 { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
         .preview-spinner { text-align: center; padding: 40px; color: var(--muted); }
-        /* Share modal */
+
+        /* ── Share modal ────────────────────────────────────────── */
+        #shareModal { z-index: 1100; }
         #shareModal .modal-content { max-width: 540px; width: 96vw; }
         .share-link-box { display: flex; gap: 8px; margin-top: 6px; }
         .share-link-box input { flex: 1; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
@@ -39,22 +152,12 @@
         .share-badge { font-size: 11px; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
         .badge-view { background: #dbeafe; color: #1d4ed8; }
         .badge-edit { background: #dcfce7; color: #15803d; }
-        .badge-pw { background: #fef3c7; color: #92400e; }
-        /* File rows */
-        .file-item { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--border); gap: 10px; border-radius: 6px; }
-        .file-item:hover { background: rgba(79,142,247,0.04); }
-        .file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
-        .file-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-        .btn-sm { padding: 5px 9px; font-size: 12px; border-radius: 7px; }
-        .btn-preview { background: linear-gradient(90deg,#6366f1,#8b5cf6); }
-        .btn-share   { background: linear-gradient(90deg,#0ea5e9,#06b6d4); }
-        /* User sections */
-        .user-section { margin-bottom: 18px; }
-        .user-section-header { display: flex; align-items: center; gap: 10px; padding: 10px 0 6px; border-bottom: 2px solid var(--border); margin-bottom: 4px; cursor: pointer; }
-        .user-section-header h3 { margin: 0; font-size: 15px; flex: 1; }
-        .toggle-icon { color: var(--accent-1); font-size: 14px; }
+        .badge-pw   { background: #fef3c7; color: #92400e; }
+
+        /* filter bar */
+        .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+        .filter-bar input { flex: 1; min-width: 180px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
     </style>
-    <script src="/branding.js"></script>
 </head>
 <body>
 <div class="container">
@@ -62,10 +165,34 @@
     <a href="/upload.html"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
     <hr>
     <h1><i class="fas fa-folder-open"></i> All User Files</h1>
-    <div id="file-list"></div>
+
+    <div class="filter-bar">
+        <input id="userFilter" type="text" placeholder="Search users…" oninput="renderGrid()">
+        <button class="save-btn" style="padding:8px 14px;" onclick="loadData()"><i class="fas fa-sync-alt"></i> Refresh</button>
+    </div>
+
+    <div class="user-grid" id="userGrid"></div>
 </div>
 
-<!-- Preview Modal -->
+<!-- ── File Drawer ───────────────────────────────────────────────────── -->
+<div id="fileDrawer" onclick="onDrawerBackdrop(event)">
+    <div class="drawer-panel" id="drawerPanel">
+        <div class="drawer-header">
+            <div class="drawer-avatar" id="drawerAvatar"></div>
+            <div style="flex:1;min-width:0;">
+                <h3 id="drawerTitle"></h3>
+                <p id="drawerSub"></p>
+            </div>
+            <button class="drawer-close" onclick="closeDrawer()">✕</button>
+        </div>
+        <div class="drawer-search">
+            <input id="fileFilter" type="text" placeholder="Search files…" oninput="renderDrawerFiles()">
+        </div>
+        <div class="drawer-body" id="drawerBody"></div>
+    </div>
+</div>
+
+<!-- ── Preview Modal ─────────────────────────────────────────────────── -->
 <div id="previewModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-content card">
         <div class="preview-header">
@@ -76,7 +203,7 @@
     </div>
 </div>
 
-<!-- Share Modal -->
+<!-- ── Share Modal ───────────────────────────────────────────────────── -->
 <div id="shareModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-content card">
         <h3><i class="fas fa-share-alt"></i> Share: <span id="shareFilename" style="font-weight:400;"></span></h3>
@@ -85,12 +212,8 @@
         <div style="margin-bottom:14px;">
             <label style="display:block;font-weight:600;margin-bottom:6px;">Access mode</label>
             <div style="display:flex;gap:10px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                    <input type="radio" name="shareMode" value="view" checked> View-only
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                    <input type="radio" name="shareMode" value="edit"> View + Download
-                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="shareMode" value="view" checked> View-only</label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="shareMode" value="edit"> View + Download</label>
             </div>
         </div>
         <div class="modal-row">
@@ -101,28 +224,30 @@
             <label style="font-weight:600;">Expires in (hours, blank = never)</label>
             <input id="shareExpiry" type="number" min="1" placeholder="e.g. 24" style="width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);">
         </div>
-
         <div id="shareLinkSection" style="display:none;margin-top:10px;">
             <label style="font-weight:600;">Share link</label>
             <div class="share-link-box">
                 <input id="shareLinkInput" type="text" readonly>
-                <button class="btn-sm" onclick="copyShareLink()"><i class="fas fa-copy"></i></button>
+                <button class="btn-xs" onclick="copyShareLink()"><i class="fas fa-copy"></i></button>
             </div>
         </div>
-
         <div class="modal-actions" style="margin-top:14px;">
             <button class="save-btn" onclick="closeShareModal()">Close</button>
             <button class="save-btn" onclick="createShare()"><i class="fas fa-link"></i> Create Link</button>
         </div>
-
         <div id="existingShares" style="margin-top:16px;"></div>
     </div>
 </div>
 
 <script>
+    // ── State ──────────────────────────────────────────────────────────────
+    let allUploads = {};    // { username: [filenames] }
+    let allUsers   = [];    // from /api/users
+    let drawerUser = null;  // currently open drawer username
     let _shareFilename = null;
-    let _shareOwner = null;
+    let _shareOwner    = null;
 
+    // ── Toast ──────────────────────────────────────────────────────────────
     function showToast(msg, type = 'info') {
         const c = document.getElementById('toast-container');
         const t = document.createElement('div'); t.className = `toast ${type}`; t.textContent = msg;
@@ -130,83 +255,164 @@
         setTimeout(() => { t.classList.remove('show'); setTimeout(() => c.removeChild(t), 220); }, 3000);
     }
 
-    function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
 
+    // ── Icons ──────────────────────────────────────────────────────────────
     function fileIcon(f) {
-        const e = f.split('.').pop().toLowerCase();
-        const m = { pdf:'fa-file-pdf',doc:'fa-file-word',docx:'fa-file-word',xls:'fa-file-excel',xlsx:'fa-file-excel',ppt:'fa-file-powerpoint',pptx:'fa-file-powerpoint',jpg:'fa-file-image',jpeg:'fa-file-image',png:'fa-file-image',gif:'fa-file-image',webp:'fa-file-image',svg:'fa-file-image',mp4:'fa-file-video',mov:'fa-file-video',mp3:'fa-file-audio',txt:'fa-file-alt',md:'fa-file-alt',csv:'fa-file-csv',json:'fa-file-code',zip:'fa-file-archive' };
+        const e = (f.split('.').pop() || '').toLowerCase();
+        const m = { pdf:'fa-file-pdf', doc:'fa-file-word', docx:'fa-file-word', xls:'fa-file-excel', xlsx:'fa-file-excel', ppt:'fa-file-powerpoint', pptx:'fa-file-powerpoint', jpg:'fa-file-image', jpeg:'fa-file-image', png:'fa-file-image', gif:'fa-file-image', webp:'fa-file-image', svg:'fa-file-image', bmp:'fa-file-image', mp4:'fa-file-video', mov:'fa-file-video', mp3:'fa-file-audio', txt:'fa-file-alt', md:'fa-file-alt', csv:'fa-file-csv', json:'fa-file-code', zip:'fa-file-archive', rar:'fa-file-archive' };
         return 'fas ' + (m[e] || 'fa-file');
     }
 
     function isPreviewable(f) {
-        const e = f.split('.').pop().toLowerCase();
+        const e = (f.split('.').pop() || '').toLowerCase();
         return ['txt','md','log','csv','json','xml','html','htm','css','js','ts','py','sh','yaml','yml','ini','conf','docx','xlsx','xls','pptx','jpg','jpeg','png','gif','webp','svg','bmp','pdf'].includes(e);
     }
 
-    // ── Render files ───────────────────────────────────────────────────────
-    function fetchAndRenderFiles() {
-        fetch('/api/uploads')
-            .then(r => r.json())
-            .then(data => {
-                const container = document.getElementById('file-list');
-                container.innerHTML = '';
-                const usernames = Object.keys(data);
-                if (!usernames.length) { container.innerHTML = '<p>No uploads found.</p>'; return; }
-                usernames.forEach(username => {
-                    const files = data[username];
-                    const section = document.createElement('div');
-                    section.className = 'user-section';
+    function roleBadgeClass(role) {
+        return { user:'role-user', admin:'role-admin', superadmin:'role-superadmin' }[role] || 'role-user';
+    }
+    function roleLabel(role) {
+        return { user:'User', admin:'Admin', superadmin:'Super Admin' }[role] || role;
+    }
+    function roleIcon(role) {
+        return { user:'fa-user', admin:'fa-user-shield', superadmin:'fa-crown' }[role] || 'fa-user';
+    }
 
-                    const header = document.createElement('div');
-                    header.className = 'user-section-header';
-                    header.innerHTML = `
-                        <i class="fas fa-user" style="color:var(--accent-1);"></i>
-                        <h3>${escapeHtml(username)}</h3>
-                        <span style="color:var(--muted);font-size:12px;">${files.length} file${files.length !== 1 ? 's' : ''}</span>
-                        <i class="fas fa-chevron-down toggle-icon"></i>`;
-                    section.appendChild(header);
+    function fmtBytes(bytes) {
+        if (!bytes) return '0 B';
+        const k = 1024, sizes = ['B','KB','MB','GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
 
-                    const body = document.createElement('div');
-                    if (!files.length) {
-                        body.innerHTML = '<p style="padding:8px 10px;color:var(--muted);font-size:13px;">No files.</p>';
-                    } else {
-                        files.forEach(file => {
-                            const canPreview = isPreviewable(file);
-                            const item = document.createElement('div');
-                            item.className = 'file-item';
-                            item.innerHTML = `
-                                <i class="${fileIcon(file)}" style="color:var(--accent-1);font-size:16px;flex-shrink:0;"></i>
-                                <span class="file-name" title="${escapeHtml(file)}">
-                                    <a href="/uploads/${encodeURIComponent(username)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>
-                                </span>
-                                <div class="file-actions">
-                                    ${canPreview ? `<button class="btn-sm btn-preview" onclick="openPreview('${username.replace(/'/g,"\\'")}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-eye"></i> Preview</button>` : ''}
-                                    <button class="btn-sm btn-share" onclick="openShareModal('${username.replace(/'/g,"\\'")}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-share-alt"></i> Share</button>
-                                    <button class="btn-sm danger" onclick="deleteFile('${username.replace(/'/g,"\\'")}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
-                                </div>`;
-                            body.appendChild(item);
-                        });
-                    }
-                    section.appendChild(body);
-                    container.appendChild(section);
+    function initials(name) {
+        return (name || '?').slice(0, 2).toUpperCase();
+    }
 
-                    // Toggle collapse
-                    header.addEventListener('click', () => {
-                        const icon = header.querySelector('.toggle-icon');
-                        if (body.style.display === 'none') {
-                            body.style.display = ''; icon.className = 'fas fa-chevron-down toggle-icon';
-                        } else {
-                            body.style.display = 'none'; icon.className = 'fas fa-chevron-right toggle-icon';
-                        }
-                    });
-                });
-            });
+    // ── Data loading ───────────────────────────────────────────────────────
+    async function loadData() {
+        try {
+            const [uploadsResp, usersResp] = await Promise.all([
+                fetch('/api/uploads'),
+                fetch('/api/users')
+            ]);
+            allUploads = await uploadsResp.json();
+            allUsers   = await usersResp.json();
+            renderGrid();
+        } catch (e) {
+            document.getElementById('userGrid').innerHTML = '<p style="color:#ef4444;">Failed to load data.</p>';
+        }
+    }
+
+    // ── User grid ──────────────────────────────────────────────────────────
+    function renderGrid() {
+        const q = document.getElementById('userFilter').value.toLowerCase();
+        const grid = document.getElementById('userGrid');
+        const users = allUsers.filter(u => !q || u.username.toLowerCase().includes(q));
+
+        if (!users.length) {
+            grid.innerHTML = '<p style="color:var(--muted);">No users found.</p>';
+            return;
+        }
+
+        grid.innerHTML = '';
+        users.forEach(u => {
+            const files = allUploads[u.username] || [];
+            const usageBytes = u.usage || 0;
+            const card = document.createElement('div');
+            card.className = 'user-card';
+            card.innerHTML = `
+                <div class="user-card-top">
+                    <div class="user-avatar">${initials(u.username)}</div>
+                    <div class="user-card-info">
+                        <h3>${escapeHtml(u.username)}</h3>
+                        <span class="role-badge ${roleBadgeClass(u.role)}">
+                            <i class="fas ${roleIcon(u.role)}" style="font-size:10px;"></i> ${roleLabel(u.role)}
+                        </span>
+                    </div>
+                </div>
+                <div class="user-card-stats">
+                    <span><i class="fas fa-file"></i> ${files.length} file${files.length !== 1 ? 's' : ''}</span>
+                    <span><i class="fas fa-hdd"></i> ${fmtBytes(usageBytes)}</span>
+                </div>
+                <button class="open-files-btn" onclick="openDrawer('${escapeHtml(u.username)}')" ${files.length === 0 ? 'disabled' : ''}>
+                    <i class="fas fa-folder-open"></i>
+                    ${files.length === 0 ? 'No Files' : 'View Files'}
+                </button>`;
+            grid.appendChild(card);
+        });
+    }
+
+    // ── File Drawer ────────────────────────────────────────────────────────
+    function openDrawer(username) {
+        drawerUser = username;
+        document.getElementById('drawerAvatar').textContent = initials(username);
+        document.getElementById('drawerTitle').textContent = username;
+        document.getElementById('fileFilter').value = '';
+        const files = allUploads[username] || [];
+        const userMeta = allUsers.find(u => u.username === username);
+        document.getElementById('drawerSub').textContent = `${files.length} file${files.length !== 1 ? 's' : ''} · ${fmtBytes(userMeta ? userMeta.usage : 0)}`;
+        document.getElementById('fileDrawer').classList.add('show');
+        document.body.style.overflow = 'hidden';
+        renderDrawerFiles();
+    }
+
+    function closeDrawer() {
+        document.getElementById('fileDrawer').classList.remove('show');
+        document.body.style.overflow = '';
+        drawerUser = null;
+    }
+
+    function onDrawerBackdrop(e) {
+        if (e.target === document.getElementById('fileDrawer')) closeDrawer();
+    }
+
+    function renderDrawerFiles() {
+        const q = document.getElementById('fileFilter').value.toLowerCase();
+        const files = (allUploads[drawerUser] || []).filter(f => !q || f.toLowerCase().includes(q));
+        const body = document.getElementById('drawerBody');
+
+        if (!files.length) {
+            body.innerHTML = `<div class="drawer-empty"><i class="fas fa-folder-open"></i><p>${q ? 'No matching files.' : 'No files uploaded.'}</p></div>`;
+            return;
+        }
+
+        body.innerHTML = '';
+        files.forEach(file => {
+            const canPreview = isPreviewable(file);
+            const item = document.createElement('div');
+            item.className = 'dfile-item';
+            item.innerHTML = `
+                <i class="dfile-icon ${fileIcon(file)}"></i>
+                <span class="dfile-name" title="${escapeHtml(file)}">
+                    <a href="/uploads/${encodeURIComponent(drawerUser)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>
+                </span>
+                <div class="dfile-actions">
+                    ${canPreview ? `<button class="btn-xs btn-preview" onclick="openPreview('${drawerUser.replace(/'/g,"\\'")}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-eye"></i></button>` : ''}
+                    <button class="btn-xs btn-share" onclick="openShareModal('${drawerUser.replace(/'/g,"\\'")}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-share-alt"></i></button>
+                    <button class="btn-xs danger" onclick="deleteFile('${drawerUser.replace(/'/g,"\\'")}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+                </div>`;
+            body.appendChild(item);
+        });
     }
 
     function deleteFile(username, filename) {
-        if (!confirm(`Delete ${filename}?`)) return;
+        if (!confirm(`Delete "${filename}" from ${username}?`)) return;
         fetch(`/api/files/${encodeURIComponent(username)}/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-            .then(r => { if (r.ok) fetchAndRenderFiles(); else alert('Error deleting file.'); });
+            .then(r => {
+                if (r.ok) {
+                    showToast('File deleted', 'success');
+                    // Remove from local state
+                    allUploads[username] = (allUploads[username] || []).filter(f => f !== filename);
+                    renderDrawerFiles();
+                    renderGrid(); // update file count on card
+                } else {
+                    showToast('Error deleting file', 'error');
+                }
+            });
     }
 
     // ── Preview ────────────────────────────────────────────────────────────
@@ -215,9 +421,10 @@
         document.getElementById('previewTitle').textContent = filename;
         document.getElementById('previewContent').innerHTML = `<div class="preview-spinner"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Loading…</p></div>`;
         modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
+
         const url = `/uploads/${encodeURIComponent(username)}/${encodeURIComponent(filename)}`;
-        const ext = filename.split('.').pop().toLowerCase();
-        const el = document.getElementById('previewContent');
+        const ext = (filename.split('.').pop() || '').toLowerCase();
+        const el  = document.getElementById('previewContent');
         try {
             if (['jpg','jpeg','png','gif','webp','svg','bmp'].includes(ext)) {
                 el.innerHTML = `<img src="${url}" alt="${escapeHtml(filename)}">`;
@@ -238,7 +445,8 @@
             } else if (ext === 'pptx') {
                 const buf = await fetch(url).then(r => r.arrayBuffer());
                 const zip = await JSZip.loadAsync(buf);
-                const slides = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort((a,b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+                const slides = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+                    .sort((a,b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
                 let html = '';
                 for (const sf of slides) {
                     const xmlStr = await zip.files[sf].async('string');
@@ -248,7 +456,7 @@
                 }
                 el.innerHTML = html || '<p>No slides found.</p>';
             } else {
-                const text = await fetch(url).then(r => { if (!r.ok) throw new Error('Load failed'); return r.text(); });
+                const text = await fetch(url).then(r => { if (!r.ok) throw new Error('Failed'); return r.text(); });
                 el.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
             }
         } catch (e) {
@@ -262,7 +470,7 @@
         document.getElementById('previewContent').innerHTML = '';
     }
 
-    // ── Share modal ────────────────────────────────────────────────────────
+    // ── Share ──────────────────────────────────────────────────────────────
     function openShareModal(owner, filename) {
         _shareOwner = owner; _shareFilename = filename;
         document.getElementById('shareOwner').textContent = owner;
@@ -286,18 +494,16 @@
         const password = document.getElementById('sharePassword').value;
         const mode = document.querySelector('input[name="shareMode"]:checked').value;
         const expiresHours = document.getElementById('shareExpiry').value;
-        try {
-            const resp = await fetch('/api/shares', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: _shareFilename, ownerUsername: _shareOwner, password: password || undefined, mode, expiresHours: expiresHours || undefined })
-            });
-            if (!resp.ok) { const j = await resp.json().catch(() => ({})); showToast(j.error || 'Failed', 'error'); return; }
-            const { url } = await resp.json();
-            document.getElementById('shareLinkInput').value = window.location.origin + url;
-            document.getElementById('shareLinkSection').style.display = 'block';
-            showToast('Share link created!', 'success');
-            loadExistingShares(_shareFilename);
-        } catch (e) { showToast('Error creating share', 'error'); }
+        const resp = await fetch('/api/shares', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: _shareFilename, ownerUsername: _shareOwner, password: password || undefined, mode, expiresHours: expiresHours || undefined })
+        });
+        if (!resp.ok) { const j = await resp.json().catch(() => ({})); showToast(j.error || 'Failed', 'error'); return; }
+        const { url } = await resp.json();
+        document.getElementById('shareLinkInput').value = window.location.origin + url;
+        document.getElementById('shareLinkSection').style.display = 'block';
+        showToast('Share link created!', 'success');
+        loadExistingShares(_shareFilename);
     }
 
     function copyShareLink() {
@@ -308,20 +514,18 @@
     async function loadExistingShares(filename) {
         const container = document.getElementById('existingShares');
         try {
-            const resp = await fetch('/api/shares');
-            if (!resp.ok) return;
-            const shares = (await resp.json()).filter(s => s.filename === filename && s.username === _shareOwner);
+            const shares = (await fetch('/api/shares').then(r => r.json())).filter(s => s.filename === filename && s.username === _shareOwner);
             if (!shares.length) { container.innerHTML = ''; return; }
-            let html = `<h4 style="margin:0 0 8px;font-size:14px;">Existing links for this file</h4>`;
+            let html = `<h4 style="margin:0 0 8px;font-size:14px;">Existing links</h4>`;
             shares.forEach(s => {
                 const url = window.location.origin + '/share/' + s.token;
                 const exp = s.expires_at ? new Date(s.expires_at).toLocaleString() : 'Never';
                 html += `<div class="share-list-item">
                     <span class="share-badge ${s.mode === 'edit' ? 'badge-edit' : 'badge-view'}">${s.mode === 'edit' ? 'View+DL' : 'View'}</span>
-                    ${s.hasPassword ? '<span class="share-badge badge-pw"><i class="fas fa-lock" style="font-size:10px;"></i> Pwd</span>' : ''}
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="${url}" target="_blank">${url}</a></span>
-                    <span style="color:var(--muted);font-size:11px;white-space:nowrap;">Exp: ${exp}</span>
-                    <button class="btn-sm danger" style="padding:4px 8px;" onclick="revokeShare('${s.token}','${filename.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+                    ${s.hasPassword ? '<span class="share-badge badge-pw"><i class="fas fa-lock" style="font-size:10px;"></i></span>' : ''}
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;"><a href="${url}" target="_blank">${url}</a></span>
+                    <span style="color:var(--muted);font-size:11px;white-space:nowrap;">${exp}</span>
+                    <button class="btn-xs danger" onclick="revokeShare('${s.token}','${filename.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
                 </div>`;
             });
             container.innerHTML = html;
@@ -330,18 +534,27 @@
 
     async function revokeShare(token, filename) {
         if (!confirm('Delete this share link?')) return;
-        const resp = await fetch('/api/shares/' + token, { method: 'DELETE' });
-        if (resp.ok) { showToast('Revoked', 'success'); loadExistingShares(filename); }
+        const r = await fetch('/api/shares/' + token, { method: 'DELETE' });
+        if (r.ok) { showToast('Revoked', 'success'); loadExistingShares(filename); }
         else showToast('Failed', 'error');
     }
 
-    // Backdrop close
+    // close preview/share on backdrop click
     document.addEventListener('click', e => {
         if (e.target === document.getElementById('previewModal')) closePreview();
-        if (e.target === document.getElementById('shareModal')) closeShareModal();
+        if (e.target === document.getElementById('shareModal'))   closeShareModal();
     });
 
-    fetchAndRenderFiles();
+    // close drawer on Escape, preview/share on Escape too
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            if (document.getElementById('previewModal').classList.contains('show')) { closePreview(); return; }
+            if (document.getElementById('shareModal').classList.contains('show'))   { closeShareModal(); return; }
+            closeDrawer();
+        }
+    });
+
+    loadData();
 </script>
 </body>
 </html>

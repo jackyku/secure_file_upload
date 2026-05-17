@@ -41,11 +41,16 @@
         </div>
         <hr>
 
-        <h2><i class="fas fa-users"></i> Existing Users</h2>        <div style="margin-bottom:16px;">
+        <h2><i class="fas fa-users"></i> Existing Users</h2>
+        <div style="margin-bottom:16px;" id="admin-nav-buttons">
             <a href="/admin-uploads.html"><button><i class="fas fa-clipboard-list"></i> Active Uploads</button></a>
-            <a href="/admin-monitor.html" style="margin-left: 8px;"><button><i class="fas fa-server"></i> Monitor & Cleanup</button></a>
-            <a href="/shares.html" style="margin-left: 8px;"><button><i class="fas fa-share-alt"></i> Share Links</button></a>
-            <a href="/settings.html" style="margin-left: 8px;"><button><i class="fas fa-shield-alt"></i> Policy & Audit</button></a>
+            <a href="/admin-monitor.html" style="margin-left:8px;"><button><i class="fas fa-server"></i> Monitor & Cleanup</button></a>
+            <a href="/shares.html" style="margin-left:8px;"><button><i class="fas fa-share-alt"></i> Share Links</button></a>
+            <a href="/settings.html" style="margin-left:8px;"><button><i class="fas fa-shield-alt"></i> Policy & Audit</button></a>
+            <!-- Superadmin-only: shown by JS below -->
+            <span id="superadmin-nav" style="display:none;">
+                <a href="/admin-files.html" style="margin-left:8px;"><button style="background:linear-gradient(90deg,#92400e,#d97706);"><i class="fas fa-crown"></i> All User Files</button></a>
+            </span>
         </div>        <div style="overflow-x: auto;">
             <table class="user-table">
 <thead>
@@ -115,10 +120,45 @@
             }, timeout);
         }
 
+        // Role dropdown colours applied via JS after render
+        function roleColor(role) {
+            return { user: '#6b7280', admin: '#1d4ed8', superadmin: '#92400e' }[role] || '#6b7280';
+        }
+
+        function roleDropdown(username, currentRole) {
+            const isSA = callerRole === 'superadmin';
+            const opts = [
+                { value: 'user',       label: 'User' },
+                { value: 'admin',      label: 'Admin' },
+                { value: 'superadmin', label: 'Super Admin', saOnly: true }
+            ];
+            const options = opts
+                .filter(o => !o.saOnly || isSA)
+                .map(o => `<option value="${o.value}" ${o.value === currentRole ? 'selected' : ''}>${o.label}</option>`)
+                .join('');
+            return `<select id="role-sel-${username}"
+                        onchange="changeRole('${username}', this.value, this)"
+                        style="padding:5px 8px;border-radius:8px;border:1px solid var(--border);font-size:13px;font-weight:600;cursor:pointer;color:${roleColor(currentRole)};background:#fff;">
+                        ${options}
+                    </select>`;
+        }
+
+        let callerRole = 'admin'; // will be updated from /api/me
+
+        async function init() {
+            try {
+                const me = await fetch('/api/me').then(r => r.json());
+                callerRole = me.role || 'admin';
+                if (callerRole === 'superadmin') {
+                    document.getElementById('superadmin-nav').style.display = 'inline';
+                }
+            } catch (e) {}
+            fetchUsers();
+        }
+
         function fetchUsers() {
             const tableBody = document.getElementById('user-table-body');
-            tableBody.innerHTML = ''; // Clear existing table
-            // Show loading row
+            tableBody.innerHTML = '';
             const loadingRow = document.createElement('tr');
             loadingRow.innerHTML = '<td colspan="6" style="text-align:center;padding:24px;">Loading users...</td>';
             tableBody.appendChild(loadingRow);
@@ -126,18 +166,14 @@
             fetch('/api/users', { credentials: 'same-origin' })
                 .then(async response => {
                     if (!response.ok) {
-                        // Try to read text/json error
                         let msg = `Error: ${response.status}`;
-                        try {
-                            const t = await response.text();
-                            if (t) msg += ' - ' + t;
-                        } catch (e) {}
+                        try { const t = await response.text(); if (t) msg += ' - ' + t; } catch (e) {}
                         throw new Error(msg);
                     }
                     return response.json();
                 })
                 .then(users => {
-                    tableBody.innerHTML = ''; // Clear loading row
+                    tableBody.innerHTML = '';
                     if (!users || users.length === 0) {
                         const emptyRow = document.createElement('tr');
                         emptyRow.innerHTML = '<td colspan="6" style="text-align:center;padding:24px;">No users found.</td>';
@@ -148,37 +184,34 @@
                         const usageMB = (user.usage / (1024 * 1024)).toFixed(2);
                         const row = document.createElement('tr');
 
-                        // Format last_login timestamp or show N/A
                         let lastLoginStr = 'N/A';
                         if (user.last_login) {
                             const ts = Number(user.last_login);
                             if (!Number.isNaN(ts)) {
                                 const d = new Date(ts);
-                                const pad = (n) => n.toString().padStart(2, '0');
+                                const pad = n => n.toString().padStart(2, '0');
                                 let hours = d.getHours();
                                 const ampm = hours >= 12 ? 'PM' : 'AM';
-                                hours = hours % 12;
-                                if (hours === 0) hours = 12;
-                                lastLoginStr = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(hours)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`;
+                                hours = hours % 12 || 12;
+                                lastLoginStr = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(hours)}:${pad(d.getMinutes())} ${ampm}`;
                             }
                         }
 
                         row.innerHTML = `
                             <td>${user.username}</td>
                             <td>${user.status}</td>
-                            <td>${user.role}</td>
+                            <td>${roleDropdown(user.username, user.role)}</td>
                             <td>
-                                ${usageMB} MB / 
+                                ${usageMB} MB /
                                 <span style="display:inline-flex;align-items:center;gap:8px;">
                                   <input class="iconless-input" type="number" value="${user.quota || 1}" id="quota-${user.username}" style="width:92px;" step="0.1" min="0">
                                   <button class="save-btn" onclick="setQuota('${user.username}')" title="Save Quota"><i class="fas fa-save"></i></button>
                                 </span>
                             </td>
                             <td>${lastLoginStr}</td>
-                            <td style="min-width: 280px;">
+                            <td style="min-width:220px;">
                                 <button onclick="setPassword('${user.username}')" title="Set Password"><i class="fas fa-key"></i></button>
                                 <button onclick="toggleStatus('${user.username}')" title="Toggle Status"><i class="fas fa-power-off"></i></button>
-                                <button onclick="toggleRole('${user.username}')" title="Toggle Role"><i class="fas fa-user-shield"></i></button>
                                 <button class="danger" onclick="deleteUser('${user.username}')" title="Delete User"><i class="fas fa-trash"></i></button>
                             </td>
                         `;
@@ -190,7 +223,6 @@
                     const errRow = document.createElement('tr');
                     errRow.innerHTML = `<td colspan="6" style="text-align:center;padding:24px;color:#b91c1c;">Failed to load users: ${String(err.message)}</td>`;
                     tableBody.appendChild(errRow);
-                    console.error('fetchUsers error:', err);
                 });
         }
 
@@ -215,27 +247,14 @@
         });
 
         function setQuota(username) {
-            const quotaInput = document.getElementById(`quota-${username}`);
-            const quota = parseFloat(quotaInput.value);
-            if (isNaN(quota) || quota < 0) {
-                showToast('Please enter a valid, non-negative quota.', 'error');
-                return;
-            }
+            const quota = parseFloat(document.getElementById(`quota-${username}`).value);
+            if (isNaN(quota) || quota < 0) { showToast('Invalid quota value.', 'error'); return; }
             fetch('/api/users/set-quota', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, quota })
-            }).then(response => {
-                if (response.ok) {
-                    fetchUsers();
-                    showToast('Quota updated', 'success');
-                } else {
-                    showToast('Failed to set quota.', 'error');
-                }
-            });
+            }).then(r => { if (r.ok) { fetchUsers(); showToast('Quota updated', 'success'); } else showToast('Failed to set quota.', 'error'); });
         }
 
-        // Open admin set-password modal
         function setPassword(username) {
             document.getElementById('adminSetPwdUser').textContent = username;
             document.getElementById('admin-pw').value = '';
@@ -246,7 +265,8 @@
         }
 
         document.getElementById('admin-cancel').addEventListener('click', () => {
-            const modal = document.getElementById('adminSetPwdModal'); modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true');
+            const modal = document.getElementById('adminSetPwdModal');
+            modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true');
         });
 
         document.getElementById('admin-submit').addEventListener('click', async () => {
@@ -263,29 +283,42 @@
 
         function toggleStatus(username) {
             fetch('/api/users/toggle-status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })
             }).then(() => fetchUsers());
         }
 
-        function toggleRole(username) {
-            fetch('/api/users/toggle-role', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username })
-            }).then(() => fetchUsers());
+        async function changeRole(username, newRole, selectEl) {
+            if (newRole === 'superadmin') {
+                if (!confirm(`Promote "${username}" to Super Admin?\nSuper Admins can see ALL users' uploaded files.`)) {
+                    // Revert dropdown to previous value
+                    fetchUsers();
+                    return;
+                }
+            }
+            const resp = await fetch('/api/users/set-role', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, role: newRole })
+            });
+            if (resp.ok) {
+                const labels = { user: 'User', admin: 'Admin', superadmin: 'Super Admin' };
+                showToast(`${username} → ${labels[newRole]}`, 'success');
+                // Update dropdown colour immediately
+                if (selectEl) selectEl.style.color = roleColor(newRole);
+            } else {
+                const msg = await resp.text().catch(() => 'Error');
+                showToast(msg, 'error');
+                fetchUsers(); // revert UI
+            }
         }
 
         function deleteUser(username) {
             if (confirm('Are you sure you want to delete ' + username + '?')) {
-                fetch('/api/users/' + username, {
-                    method: 'DELETE'
-                }).then(() => fetchUsers());
+                fetch('/api/users/' + username, { method: 'DELETE' }).then(() => fetchUsers());
             }
         }
 
-        fetchUsers(); // Initial load
+        init();
     </script>
 </body>
 </html>

@@ -198,11 +198,23 @@ function requireLogin(req, res, next) {
     }
 }
 
+function isAdminRole(role) {
+    return role === 'admin' || role === 'superadmin';
+}
+
 function requireAdmin(req, res, next) {
-    if (req.session.user && req.session.user.role === 'admin') {
+    if (req.session.user && isAdminRole(req.session.user.role)) {
         next();
     } else {
         res.status(403).send('Forbidden: Admins only');
+    }
+}
+
+function requireSuperAdmin(req, res, next) {
+    if (req.session.user && req.session.user.role === 'superadmin') {
+        next();
+    } else {
+        res.status(403).send('Forbidden: Super Admins only');
     }
 }
 
@@ -227,7 +239,7 @@ app.get('/shares.html', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'shares.html'));
 });
 
-app.get('/admin-files.html', requireAdmin, (req, res) => {
+app.get('/admin-files.html', requireSuperAdmin, (req, res) => {
     res.sendFile(path.join(__dirname, 'admin-files.html'));
 });
 
@@ -283,7 +295,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
 
 app.get('/api/uploads', requireLogin, (req, res) => {
     const user = req.session.user;
-    if (user.role === 'admin') {
+    if (user.role === 'superadmin') {
         const allFiles = {};
         try {
             const usernames = fs.readdirSync('./uploads');
@@ -301,7 +313,7 @@ app.get('/api/uploads', requireLogin, (req, res) => {
             });
             res.json(allFiles);
         } catch (e) {
-            console.error("Error reading uploads directory for admin:", e);
+            console.error("Error reading uploads directory for superadmin:", e);
             return res.status(500).send('Error reading files.');
         }
     } else {
@@ -469,7 +481,7 @@ app.post('/upload/initiate', requireLogin, async (req, res) => {
 
         // Check concurrent uploads per-user
         const userSet = activeUploads.get(username) || new Set();
-        if (userSet.size >= MAX_CONCURRENT_UPLOADS_PER_USER && dbUser.role !== 'admin') {
+        if (userSet.size >= MAX_CONCURRENT_UPLOADS_PER_USER && !isAdminRole(dbUser.role)) {
             return res.status(429).json({ error: 'Too many concurrent uploads for user' });
         }
 
@@ -481,7 +493,7 @@ app.post('/upload/initiate', requireLogin, async (req, res) => {
         }
 
         const quotaBytes = (dbUser && typeof dbUser.quota === 'number') ? dbUser.quota * 1024 * 1024 * 1024 : Infinity;
-        if (dbUser.role !== 'admin' && quotaBytes !== Infinity) {
+        if (!isAdminRole(dbUser.role) && quotaBytes !== Infinity) {
             const currentUsage = getUserUsage(username);
             if (currentUsage + totalBytes > quotaBytes) {
                 return res.status(413).json({ error: 'Quota exceeded' });
@@ -600,7 +612,7 @@ app.post('/upload/complete', requireLogin, async (req, res) => {
         const dbUser = await db.getUser(username);
         const quotaBytes = (dbUser && typeof dbUser.quota === 'number') ? dbUser.quota * 1024 * 1024 * 1024 : Infinity;
         const currentUsage = getUserUsage(username);
-        if (dbUser && dbUser.role !== 'admin' && quotaBytes !== Infinity && currentUsage + meta.totalBytes > quotaBytes) {
+        if (dbUser && !isAdminRole(dbUser.role) && quotaBytes !== Infinity && currentUsage + meta.totalBytes > quotaBytes) {
             return res.status(413).json({ error: 'Quota exceeded' });
         }
         const freeBytes = getFreeSpaceBytes(__dirname);
@@ -808,8 +820,8 @@ async function runInactivityCleanup(dryRun = false) {
             const full = await db.getUser(u.username);
             if (!full) continue;
             // Do not apply policy to admins
-            if (full.role === 'admin') {
-                skipped.push({ username: full.username, reason: 'admin' });
+            if (isAdminRole(full.role)) {
+                skipped.push({ username: full.username, reason: full.role });
                 continue;
             }
             // Determine last activity: prefer last_login, fall back to updated_at or created_at
@@ -941,8 +953,8 @@ app.delete('/api/files/:username/:filename', requireLogin, (req, res) => {
     const { username, filename } = req.params;
     const sessionUser = req.session.user;
 
-    // Security check: Admins can delete any file, users can only delete their own.
-    if (sessionUser.role !== 'admin' && sessionUser.username !== username) {
+    // Security check: Super Admins can delete any file; admin/user can only delete their own.
+    if (sessionUser.role !== 'superadmin' && sessionUser.username !== username) {
         return res.status(403).send('Forbidden: You can only delete your own files.');
     }
 
@@ -1048,6 +1060,27 @@ app.post('/api/users/toggle-status', requireAdmin, async (req, res) => {
     }
 });
 
+// Set explicit role (superadmin required to grant superadmin)
+app.post('/api/users/set-role', requireAdmin, async (req, res) => {
+    try {
+        const actor = req.session.user;
+        const { username, role } = req.body;
+        if (!['user', 'admin', 'superadmin'].includes(role)) {
+            return res.status(400).send('Invalid role');
+        }
+        if (role === 'superadmin' && actor.role !== 'superadmin') {
+            return res.status(403).send('Only Super Admins can grant the Super Admin role');
+        }
+        const existing = await db.getUser(username);
+        if (!existing) return res.sendStatus(404);
+        await db.setRole(username, role, actor.username);
+        res.sendStatus(200);
+    } catch (e) {
+        console.error('set-role error', e);
+        res.status(500).send('Internal error');
+    }
+});
+
 app.post('/api/users/toggle-role', requireAdmin, async (req, res) => {
     try {
         const actor = req.session.user && req.session.user.username;
@@ -1123,9 +1156,9 @@ app.post('/api/shares', requireLogin, async (req, res) => {
     try {
         const { filename, password, mode, expiresHours, ownerUsername } = req.body;
         const sessionUser = req.session.user;
-        const isAdmin = sessionUser.role === 'admin';
-        // Resolve file owner: admin can specify any user, otherwise own files only
-        const fileOwner = (isAdmin && ownerUsername) ? ownerUsername : sessionUser.username;
+        const isSuperAdmin = sessionUser.role === 'superadmin';
+        // Resolve file owner: superadmin can share any user's file, others share only their own
+        const fileOwner = (isSuperAdmin && ownerUsername) ? ownerUsername : sessionUser.username;
         const filePath = path.join(__dirname, 'uploads', fileOwner, filename);
         if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
         const token = crypto.randomBytes(16).toString('hex');
@@ -1139,12 +1172,12 @@ app.post('/api/shares', requireLogin, async (req, res) => {
     }
 });
 
-// List shares (own, or all for admin)
+// List shares (own, or all for superadmin)
 app.get('/api/shares', requireLogin, async (req, res) => {
     try {
         const username = req.session.user.username;
-        const isAdmin = req.session.user.role === 'admin';
-        const shares = await db.listShares(username, isAdmin);
+        const isSuperAdmin = req.session.user.role === 'superadmin';
+        const shares = await db.listShares(username, isSuperAdmin);
         // Strip password_hash from response
         res.json(shares.map(s => ({ ...s, password_hash: undefined, hasPassword: !!s.password_hash })));
     } catch (e) {
@@ -1156,7 +1189,7 @@ app.get('/api/shares', requireLogin, async (req, res) => {
 app.patch('/api/shares/:token', requireLogin, async (req, res) => {
     try {
         const username = req.session.user.username;
-        const isAdmin = req.session.user.role === 'admin';
+        const isAdmin = req.session.user.role === 'superadmin';
         let expiresAt = null;
         if (req.body.expires_at !== undefined && req.body.expires_at !== null && req.body.expires_at !== '') {
             expiresAt = parseInt(req.body.expires_at, 10);
@@ -1174,8 +1207,8 @@ app.patch('/api/shares/:token', requireLogin, async (req, res) => {
 app.delete('/api/shares/:token', requireLogin, async (req, res) => {
     try {
         const username = req.session.user.username;
-        const isAdmin = req.session.user.role === 'admin';
-        await db.deleteShare(req.params.token, username, isAdmin);
+        const isSuperAdmin = req.session.user.role === 'superadmin';
+        await db.deleteShare(req.params.token, username, isSuperAdmin);
         res.sendStatus(200);
     } catch (e) {
         console.error('delete share error', e);

@@ -44,6 +44,7 @@ if (usePg) {
         log: wrapSync(impl.log),
         getAudit: wrapSync(impl.getAudit),
         setLastLogin: impl.setLastLogin ? wrapSync(impl.setLastLogin) : undefined,
+        setRole: wrapSync(impl.setRole),
         createShare: wrapSync(impl.createShare),
         getShare: wrapSync(impl.getShare),
         listShares: wrapSync(impl.listShares),

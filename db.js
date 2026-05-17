@@ -157,6 +157,15 @@ function toggleRole(username, actor = null) {
     log(actor || 'system', 'toggle_role', username, JSON.stringify({ role: newRole }));
 }
 
+function setRole(username, role, actor = null) {
+    const valid = ['user', 'admin', 'superadmin'];
+    if (!valid.includes(role)) throw new Error('Invalid role: ' + role);
+    const user = getUser(username);
+    if (!user) throw new Error('User not found');
+    db.prepare('UPDATE users SET role = ?, updated_at = ? WHERE username = ?').run(role, Date.now(), username);
+    log(actor || 'system', 'set_role', username, JSON.stringify({ role }));
+}
+
 function deleteUser(username, actor = null) {
     db.prepare('DELETE FROM users WHERE username = ?').run(username);
     log(actor || 'system', 'delete_user', username, JSON.stringify({}));
@@ -241,6 +250,7 @@ module.exports = {
     setLastLogin,
     log,
     getAudit,
+    setRole,
     createShare,
     getShare,
     listShares,

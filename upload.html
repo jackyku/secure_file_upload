@@ -257,7 +257,7 @@
         // ── Header ────────────────────────────────────────────────────────────
         function renderHeader(user) {
             const headerSection = document.getElementById('header-section');
-            let adminLinks = user.role === 'admin'
+            let adminLinks = (user.role === 'admin' || user.role === 'superadmin')
                 ? `<a href="/admin.html" style="margin-left:10px;"><button><i class="fas fa-users-cog"></i> User Panel</button></a>` : '';
             headerSection.innerHTML = `
                 <h2>Welcome, ${user.username}!</h2>
@@ -288,10 +288,28 @@
         function renderFileSection(user) {
             const fileSection = document.getElementById('file-section');
             const quotaSection = document.getElementById('quota-section');
-            if (user.role === 'admin') {
+
+            if (user.role === 'superadmin') {
+                // Super Admin: see all user files + admin tools
+                fileSection.innerHTML = `
+                    <h2><i class="fas fa-tools"></i> Admin Tools</h2>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <a href="/admin-files.html"><button style="background:linear-gradient(90deg,#92400e,#d97706);"><i class="fas fa-crown"></i> All User Files</button></a>
+                        <a href="/admin.html"><button><i class="fas fa-users-cog"></i> User Management</button></a>
+                    </div>`;
+            } else if (user.role === 'admin') {
+                // Admin: own files only + link to user management (no "All User Files")
+                const usageMB = (user.usage / (1024 * 1024)).toFixed(2);
+                quotaSection.innerHTML = `<h3><i class="fas fa-hdd"></i> Quota Usage</h3>
+                    <p>${usageMB} MB / ${user.quota} GB used.</p>
+                    <progress value="${user.usage}" max="${user.quota * 1024 * 1024 * 1024}" style="width:100%;"></progress>`;
                 fileSection.innerHTML = `<h2><i class="fas fa-tools"></i> Admin Tools</h2>
-                    <a href="/admin-files.html"><button><i class="fas fa-folder-open"></i> View All User Files</button></a>`;
+                    <a href="/admin.html"><button><i class="fas fa-users-cog"></i> User Management</button></a>
+                    <p style="font-size:13px;color:var(--muted);margin-top:8px;"><i class="fas fa-info-circle"></i> Contact a Super Admin to view other users' files.</p>
+                    <hr>`;
+                fetchAndDisplayUserFiles(user);
             } else {
+                // Regular user: own files only
                 const usageMB = (user.usage / (1024 * 1024)).toFixed(2);
                 quotaSection.innerHTML = `<h3><i class="fas fa-hdd"></i> Quota Usage</h3>
                     <p>${usageMB} MB / ${user.quota} GB used.</p>

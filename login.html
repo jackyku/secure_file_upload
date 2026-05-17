@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Login — File Upload</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .auth-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f4f8ff 0%, #eef6f9 50%, #f7fbff 100%);
+            padding: 24px;
+        }
+        .auth-card {
+            width: 100%;
+            max-width: 420px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.9), #fff);
+            border-radius: 14px;
+            padding: 28px;
+            box-shadow: 0 10px 30px rgba(20,30,60,0.08);
+            border: 1px solid rgba(10,20,40,0.04);
+        }
+        .brand {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+        .brand svg { width: 56px; height: 56px; }
+        .brand h1 { font-size: 20px; margin: 0; color: var(--dark-color); }
+        .lead { color: var(--secondary-color); margin-bottom: 18px; }
+        .form-group { margin-bottom: 14px; }
+        input[type="text"], input[type="password"] { padding: 14px 14px 14px 14px; }
+        .btn-block { width: 100%; }
+        .small-link { display:block; margin-top:12px; text-align:center; color:var(--secondary-color); }
+        @media (max-width:480px) { .auth-card { padding: 18px; } .brand h1 { font-size:18px } }
+    </style>
+    <script src="/branding.js"></script>
+</head>
+<body>
+    <div class="auth-wrapper">
+        <main class="auth-card">
+            <div class="brand">
+                <!-- Modern rounded user icon SVG -->
+                <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <defs>
+                        <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+                            <stop offset="0" stop-color="#4f8ef7" />
+                            <stop offset="1" stop-color="#6dd3b5" />
+                        </linearGradient>
+                    </defs>
+                    <rect rx="12" ry="12" width="64" height="64" fill="url(#g1)" />
+                    <g transform="translate(8,8)" fill="#ffffff">
+                        <circle cx="24" cy="14" r="8" opacity="0.98" />
+                        <path d="M2 48c4-8 14-12 22-12s18 4 22 12H2z" />
+                    </g>
+                </svg>
+                <div>
+                    <h1>Welcome Back</h1>
+                    <p class="lead">Sign in to manage and upload your files securely.</p>
+                </div>
+            </div>
+
+            <form action="/login" method="post" autocomplete="on" novalidate>
+                <div class="form-group">
+                    <label class="sr-only" for="username">Username</label>
+                    <input id="username" name="username" type="text" placeholder="Username" required aria-label="Username">
+                </div>
+                <div class="form-group">
+                    <label class="sr-only" for="password">Password</label>
+                    <input id="password" name="password" type="password" placeholder="Password" required aria-label="Password">
+                </div>
+                <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--secondary-color);">
+                        <input type="checkbox" name="remember"> Remember me
+                    </label>
+                    <!-- Registration link removed to restrict user creation to Admin only -->
+                    <!-- <a class="small-link" href="/register.html">Create account</a> -->
+                </div>
+                <button class="btn-block" type="submit"><i class="fas fa-sign-in-alt"></i> Login</button>
+            </form>
+        </main>
+    </div>
+</body>
+</html>

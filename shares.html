@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Share Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .shares-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+        .shares-table thead th { padding: 10px 14px; text-align: left; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+        .shares-table tbody tr { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(16,24,40,0.05); }
+        .shares-table tbody td { padding: 12px 14px; vertical-align: middle; font-size: 13px; }
+        .shares-table tbody td:first-child { border-radius: 10px 0 0 10px; }
+        .shares-table tbody td:last-child { border-radius: 0 10px 10px 0; }
+        .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+        .badge-view { background: #dbeafe; color: #1d4ed8; }
+        .badge-edit { background: #dcfce7; color: #15803d; }
+        .badge-pw   { background: #fef3c7; color: #92400e; }
+        .badge-exp  { background: #fee2e2; color: #991b1b; }
+        .expiry-cell { display: flex; align-items: center; gap: 6px; }
+        .expiry-input { border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 12px; width: 160px; }
+        .btn-xs { padding: 4px 8px; font-size: 12px; border-radius: 7px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+        .empty-state i { font-size: 48px; margin-bottom: 12px; display: block; }
+        .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .filter-bar input { flex: 1; min-width: 180px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
+        .stat-chips { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-chip { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; box-shadow: 0 1px 3px rgba(16,24,40,.04); }
+        .stat-chip strong { font-size: 22px; display: block; }
+    </style>
+    <script src="/branding.js"></script>
+</head>
+<body>
+<div class="container">
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <a href="/upload.html"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+    <hr>
+    <h1><i class="fas fa-share-alt"></i> Share Management</h1>
+
+    <div class="stat-chips" id="statChips"></div>
+
+    <div class="filter-bar">
+        <input id="filterInput" type="text" placeholder="Filter by filename, owner, mode…" oninput="renderTable()">
+        <button class="save-btn btn-xs" onclick="loadShares()"><i class="fas fa-sync-alt"></i> Refresh</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table class="shares-table">
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th id="ownerCol">Owner</th>
+                    <th>Mode</th>
+                    <th>Created</th>
+                    <th>Expires</th>
+                    <th>Link</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="sharesBody"></tbody>
+        </table>
+    </div>
+    <div id="emptyState" class="empty-state" style="display:none;">
+        <i class="fas fa-share-alt"></i>
+        <h3>No share links yet</h3>
+        <p>Create share links from your files on the <a href="/upload.html">dashboard</a>.</p>
+    </div>
+</div>
+
+<script>
+    let allShares = [];
+    let isAdmin = false;
+
+    function showToast(msg, type='info') {
+        const c = document.getElementById('toast-container');
+        const t = document.createElement('div'); t.className = `toast ${type}`; t.textContent = msg;
+        c.appendChild(t); requestAnimationFrame(() => t.classList.add('show'));
+        setTimeout(() => { t.classList.remove('show'); setTimeout(() => c.removeChild(t), 220); }, 3000);
+    }
+
+    function fmt(ts) {
+        if (!ts) return '—';
+        const d = new Date(Number(ts));
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function isExpired(ts) { return ts && Date.now() > Number(ts); }
+
+    function fileIcon(f) {
+        const e = (f.split('.').pop() || '').toLowerCase();
+        const m = { pdf:'fa-file-pdf',doc:'fa-file-word',docx:'fa-file-word',xls:'fa-file-excel',xlsx:'fa-file-excel',ppt:'fa-file-powerpoint',pptx:'fa-file-powerpoint',jpg:'fa-file-image',jpeg:'fa-file-image',png:'fa-file-image',gif:'fa-file-image',txt:'fa-file-alt',csv:'fa-file-csv',zip:'fa-file-archive' };
+        return 'fas ' + (m[e] || 'fa-file');
+    }
+
+    async function loadShares() {
+        try {
+            // Get current user role
+            const meResp = await fetch('/api/me');
+            if (!meResp.ok) { window.location.href = '/login.html'; return; }
+            const me = await meResp.json();
+            isAdmin = me.role === 'admin';
+
+            if (!isAdmin) {
+                document.getElementById('ownerCol').style.display = 'none';
+            }
+
+            const resp = await fetch('/api/shares');
+            if (!resp.ok) { showToast('Failed to load shares', 'error'); return; }
+            allShares = await resp.json();
+            renderStats();
+            renderTable();
+        } catch (e) {
+            showToast('Error loading shares', 'error');
+        }
+    }
+
+    function renderStats() {
+        const total = allShares.length;
+        const active = allShares.filter(s => !isExpired(s.expires_at)).length;
+        const expired = allShares.filter(s => isExpired(s.expires_at)).length;
+        const pwProtected = allShares.filter(s => s.hasPassword).length;
+        document.getElementById('statChips').innerHTML = `
+            <div class="stat-chip"><strong>${total}</strong>Total links</div>
+            <div class="stat-chip"><strong style="color:#10b981;">${active}</strong>Active</div>
+            <div class="stat-chip"><strong style="color:#ef4444;">${expired}</strong>Expired</div>
+            <div class="stat-chip"><strong style="color:#f59e0b;">${pwProtected}</strong>Password protected</div>`;
+    }
+
+    function renderTable() {
+        const q = document.getElementById('filterInput').value.toLowerCase();
+        const filtered = q ? allShares.filter(s =>
+            (s.filename||'').toLowerCase().includes(q) ||
+            (s.username||'').toLowerCase().includes(q) ||
+            (s.mode||'').toLowerCase().includes(q)
+        ) : allShares;
+
+        const tbody = document.getElementById('sharesBody');
+        const empty = document.getElementById('emptyState');
+
+        if (!filtered.length) {
+            tbody.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+        empty.style.display = 'none';
+
+        tbody.innerHTML = '';
+        filtered.forEach(s => {
+            const expired = isExpired(s.expires_at);
+            const tr = document.createElement('tr');
+            const shareUrl = window.location.origin + '/share/' + s.token;
+            // Current expires value as datetime-local string
+            const expiresVal = s.expires_at ? new Date(Number(s.expires_at)).toISOString().slice(0,16) : '';
+
+            tr.innerHTML = `
+                <td>
+                    <span style="display:flex;align-items:center;gap:8px;">
+                        <i class="${fileIcon(s.filename)}" style="color:var(--accent-1);"></i>
+                        <span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.filename}">${s.filename}</span>
+                    </span>
+                </td>
+                ${isAdmin ? `<td style="color:var(--muted);">${s.username}</td>` : ''}
+                <td>
+                    <span class="badge ${s.mode === 'edit' ? 'badge-edit' : 'badge-view'}">${s.mode === 'edit' ? '<i class="fas fa-download"></i> View+DL' : '<i class="fas fa-eye"></i> View'}</span>
+                    ${s.hasPassword ? ' <span class="badge badge-pw"><i class="fas fa-lock"></i></span>' : ''}
+                </td>
+                <td style="color:var(--muted);white-space:nowrap;">${fmt(s.created_at)}</td>
+                <td>
+                    <div class="expiry-cell">
+                        <input type="datetime-local" class="expiry-input" id="exp-${s.token}" value="${expiresVal}" title="Set expiry date/time">
+                        <button class="save-btn btn-xs" onclick="saveExpiry('${s.token}')"><i class="fas fa-save"></i></button>
+                        <button class="btn-xs" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 7px;" onclick="clearExpiry('${s.token}')" title="Remove expiry"><i class="fas fa-times"></i></button>
+                    </div>
+                    ${expired ? '<span class="badge badge-exp" style="margin-top:4px;display:inline-flex;"><i class="fas fa-clock"></i> Expired</span>' : ''}
+                </td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="text" value="${shareUrl}" readonly style="width:160px;padding:4px 8px;font-size:11px;border-radius:6px;border:1px solid var(--border);">
+                        <button class="btn-xs save-btn" onclick="copyLink('${shareUrl}')" title="Copy"><i class="fas fa-copy"></i></button>
+                        <a href="${shareUrl}" target="_blank"><button class="btn-xs save-btn" title="Open"><i class="fas fa-external-link-alt"></i></button></a>
+                    </div>
+                </td>
+                <td>
+                    <button class="btn-xs danger" onclick="revokeShare('${s.token}')"><i class="fas fa-trash"></i> Revoke</button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function saveExpiry(token) {
+        const input = document.getElementById('exp-' + token);
+        const val = input.value;
+        const expiresAt = val ? new Date(val).getTime() : null;
+        try {
+            const resp = await fetch('/api/shares/' + token, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expires_at: expiresAt })
+            });
+            if (resp.ok) {
+                showToast('Expiry updated', 'success');
+                // Update local data
+                const s = allShares.find(x => x.token === token);
+                if (s) s.expires_at = expiresAt;
+                renderStats(); renderTable();
+            } else {
+                showToast('Failed to update expiry', 'error');
+            }
+        } catch (e) { showToast('Error', 'error'); }
+    }
+
+    async function clearExpiry(token) {
+        document.getElementById('exp-' + token).value = '';
+        try {
+            const resp = await fetch('/api/shares/' + token, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expires_at: null })
+            });
+            if (resp.ok) {
+                showToast('Expiry cleared (link never expires)', 'success');
+                const s = allShares.find(x => x.token === token);
+                if (s) s.expires_at = null;
+                renderStats(); renderTable();
+            } else showToast('Failed', 'error');
+        } catch (e) { showToast('Error', 'error'); }
+    }
+
+    async function revokeShare(token) {
+        if (!confirm('Revoke this share link? Anyone with the link will lose access.')) return;
+        const resp = await fetch('/api/shares/' + token, { method: 'DELETE' });
+        if (resp.ok) {
+            showToast('Share revoked', 'success');
+            allShares = allShares.filter(s => s.token !== token);
+            renderStats(); renderTable();
+        } else showToast('Failed to revoke', 'error');
+    }
+
+    function copyLink(url) {
+        navigator.clipboard.writeText(url).then(() => showToast('Copied!', 'success')).catch(() => {
+            const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+            showToast('Copied!', 'success');
+        });
+    }
+
+    loadShares();
+</script>
+</body>
+</html>

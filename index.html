@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        // Redirect to login or upload page based on session
+        if (document.cookie.includes('connect.sid')) {
+            window.location.href = '/upload.html';
+        } else {
+            window.location.href = '/login.html';
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <p class="text-center">Loading...</p>
+    </div>
+</body>
+</html>

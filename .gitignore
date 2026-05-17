@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Database (contains user data — keep out of git)
+app.db
+
+# Environment variables (contains credentials)
+.env
+
+# User uploaded files
+uploads/
+uploads_tmp/
+
+# SSL certificates
+certs/
+
+# Logs
+*.log
+nohup.out
+server.log
+
+# Legacy user file
+users.json
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/settings.json

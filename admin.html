@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="/branding.js"></script>
+</head>
+<body>
+    <div class="container">
+        <a href="/upload.html"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+        <hr>
+        <h1><i class="fas fa-users-cog"></i> User Management</h1>
+        
+        <h2><i class="fas fa-user-plus"></i> Create New User</h2>
+        <form id="createUserForm">
+            <div class="form-group">
+                <i class="fas fa-user"></i>
+                <input type="text" id="newUsername" placeholder="Username" required>
+            </div>
+            <div class="form-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" id="newPassword" placeholder="Password" required>
+            </div>
+            <button type="submit"><i class="fas fa-plus-circle"></i> Create User</button>
+        </form>
+
+        <!-- Admin Set Password Modal -->
+        <div id="adminSetPwdModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+            <div class="modal-content card">
+                <h3>Set Password for <span id="adminSetPwdUser"></span></h3>
+                <div class="modal-row"><input id="admin-pw" type="password" placeholder="New password (min 4 chars)"></div>
+                <div class="modal-row"><input id="admin-pw-confirm" type="password" placeholder="Confirm new password"></div>
+                <div class="modal-actions">
+                    <button id="admin-cancel" class="save-btn" type="button">Cancel</button>
+                    <button id="admin-submit" class="save-btn" type="button">Set Password</button>
+                </div>
+            </div>
+        </div>
+        <hr>
+
+        <h2><i class="fas fa-users"></i> Existing Users</h2>        <div style="margin-bottom:16px;">
+            <a href="/admin-uploads.html"><button><i class="fas fa-clipboard-list"></i> Active Uploads</button></a>
+            <a href="/admin-monitor.html" style="margin-left: 8px;"><button><i class="fas fa-server"></i> Monitor & Cleanup</button></a>
+            <a href="/shares.html" style="margin-left: 8px;"><button><i class="fas fa-share-alt"></i> Share Links</button></a>
+            <a href="/settings.html" style="margin-left: 8px;"><button><i class="fas fa-shield-alt"></i> Policy & Audit</button></a>
+        </div>        <div style="overflow-x: auto;">
+            <table class="user-table">
+<thead>
+    <tr>
+        <th>Username</th>
+        <th>Status</th>
+        <th>Role</th>
+        <th>Usage / Quota (GB)</th>
+        <th>Last Login</th>
+        <th>Actions</th>
+    </tr>
+</thead>
+                <tbody id="user-table-body">
+                    <!-- User data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <hr>
+        <style>
+            /* Improved admin users table styling */
+            :root{
+                --muted: #6b7280;
+                --accent-start: #5eead4;
+                --accent-end: #60a5fa;
+                --card-bg: #ffffff;
+                --muted-bg: #f8fafc;
+                --danger: #ef4444;
+                --border: #e6e9ee;
+            }
+            select.iconless-input { appearance: none; background: #fff; color: var(--muted); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; height:36px; }
+            input.iconless-input { height:36px; padding: 8px 12px; border-radius:8px; border:1px solid var(--border); }
+            table.user-table { width:100%; border-collapse: separate; border-spacing: 0 12px; }
+            table.user-table thead th { text-align:left; padding:12px 16px; color:var(--muted); font-weight:600; font-size:13px; }
+            table.user-table tbody tr { background: var(--card-bg); border-radius:10px; box-shadow: 0 1px 3px rgba(16,24,40,0.05); }
+            table.user-table tbody td { padding:14px 16px; vertical-align: middle; color:#111827; }
+            table.user-table tbody td.usage { width:260px; }
+            .quota-input { width:92px; box-sizing:border-box; border-radius:8px; border:1px solid var(--border); padding:6px 10px; }
+            .action-buttons { display:flex; gap:8px; align-items:center; }
+            .btn-plain { background: linear-gradient(135deg,var(--accent-start),var(--accent-end)); color:#fff; border:none; padding:8px 10px; border-radius:10px; cursor:pointer; box-shadow: 0 6px 18px rgba(96,165,250,0.12); }
+            .btn-plain.small { padding:6px 8px; border-radius:8px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; }
+            .btn-danger { background:var(--danger); color:#fff; border:none; padding:8px 10px; border-radius:10px; cursor:pointer; }
+            .last-login { color:var(--muted); font-size:13px; white-space:nowrap; }
+            @media (max-width:900px) {
+                table.user-table thead { display:none; }
+                table.user-table tbody td { display:block; width:100%; }
+                table.user-table tbody tr { padding:12px; }
+            }
+        </style>
+    </div>
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+        function showToast(message, type = 'info', timeout = 3000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.textContent = message;
+            container.appendChild(t);
+            // force reflow so transition applies
+            requestAnimationFrame(() => t.classList.add('show'));
+            setTimeout(() => {
+                t.classList.remove('show');
+                setTimeout(() => container.removeChild(t), 220);
+            }, timeout);
+        }
+
+        function fetchUsers() {
+            const tableBody = document.getElementById('user-table-body');
+            tableBody.innerHTML = ''; // Clear existing table
+            // Show loading row
+            const loadingRow = document.createElement('tr');
+            loadingRow.innerHTML = '<td colspan="6" style="text-align:center;padding:24px;">Loading users...</td>';
+            tableBody.appendChild(loadingRow);
+
+            fetch('/api/users', { credentials: 'same-origin' })
+                .then(async response => {
+                    if (!response.ok) {
+                        // Try to read text/json error
+                        let msg = `Error: ${response.status}`;
+                        try {
+                            const t = await response.text();
+                            if (t) msg += ' - ' + t;
+                        } catch (e) {}
+                        throw new Error(msg);
+                    }
+                    return response.json();
+                })
+                .then(users => {
+                    tableBody.innerHTML = ''; // Clear loading row
+                    if (!users || users.length === 0) {
+                        const emptyRow = document.createElement('tr');
+                        emptyRow.innerHTML = '<td colspan="6" style="text-align:center;padding:24px;">No users found.</td>';
+                        tableBody.appendChild(emptyRow);
+                        return;
+                    }
+                    users.forEach(user => {
+                        const usageMB = (user.usage / (1024 * 1024)).toFixed(2);
+                        const row = document.createElement('tr');
+
+                        // Format last_login timestamp or show N/A
+                        let lastLoginStr = 'N/A';
+                        if (user.last_login) {
+                            const ts = Number(user.last_login);
+                            if (!Number.isNaN(ts)) {
+                                const d = new Date(ts);
+                                const pad = (n) => n.toString().padStart(2, '0');
+                                let hours = d.getHours();
+                                const ampm = hours >= 12 ? 'PM' : 'AM';
+                                hours = hours % 12;
+                                if (hours === 0) hours = 12;
+                                lastLoginStr = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(hours)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`;
+                            }
+                        }
+
+                        row.innerHTML = `
+                            <td>${user.username}</td>
+                            <td>${user.status}</td>
+                            <td>${user.role}</td>
+                            <td>
+                                ${usageMB} MB / 
+                                <span style="display:inline-flex;align-items:center;gap:8px;">
+                                  <input class="iconless-input" type="number" value="${user.quota || 1}" id="quota-${user.username}" style="width:92px;" step="0.1" min="0">
+                                  <button class="save-btn" onclick="setQuota('${user.username}')" title="Save Quota"><i class="fas fa-save"></i></button>
+                                </span>
+                            </td>
+                            <td>${lastLoginStr}</td>
+                            <td style="min-width: 280px;">
+                                <button onclick="setPassword('${user.username}')" title="Set Password"><i class="fas fa-key"></i></button>
+                                <button onclick="toggleStatus('${user.username}')" title="Toggle Status"><i class="fas fa-power-off"></i></button>
+                                <button onclick="toggleRole('${user.username}')" title="Toggle Role"><i class="fas fa-user-shield"></i></button>
+                                <button class="danger" onclick="deleteUser('${user.username}')" title="Delete User"><i class="fas fa-trash"></i></button>
+                            </td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(err => {
+                    tableBody.innerHTML = '';
+                    const errRow = document.createElement('tr');
+                    errRow.innerHTML = `<td colspan="6" style="text-align:center;padding:24px;color:#b91c1c;">Failed to load users: ${String(err.message)}</td>`;
+                    tableBody.appendChild(errRow);
+                    console.error('fetchUsers error:', err);
+                });
+        }
+
+        document.getElementById('createUserForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            fetch('/api/users/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            }).then(response => {
+                if (response.ok) {
+                    document.getElementById('newUsername').value = '';
+                    document.getElementById('newPassword').value = '';
+                    fetchUsers();
+                    showToast('User created', 'success');
+                } else {
+                    response.text().then(t => showToast('Error creating user: ' + t, 'error'));
+                }
+            });
+        });
+
+        function setQuota(username) {
+            const quotaInput = document.getElementById(`quota-${username}`);
+            const quota = parseFloat(quotaInput.value);
+            if (isNaN(quota) || quota < 0) {
+                showToast('Please enter a valid, non-negative quota.', 'error');
+                return;
+            }
+            fetch('/api/users/set-quota', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, quota })
+            }).then(response => {
+                if (response.ok) {
+                    fetchUsers();
+                    showToast('Quota updated', 'success');
+                } else {
+                    showToast('Failed to set quota.', 'error');
+                }
+            });
+        }
+
+        // Open admin set-password modal
+        function setPassword(username) {
+            document.getElementById('adminSetPwdUser').textContent = username;
+            document.getElementById('admin-pw').value = '';
+            document.getElementById('admin-pw-confirm').value = '';
+            const modal = document.getElementById('adminSetPwdModal');
+            modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false');
+            modal.dataset.username = username;
+        }
+
+        document.getElementById('admin-cancel').addEventListener('click', () => {
+            const modal = document.getElementById('adminSetPwdModal'); modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true');
+        });
+
+        document.getElementById('admin-submit').addEventListener('click', async () => {
+            const modal = document.getElementById('adminSetPwdModal');
+            const username = modal.dataset.username;
+            const pw = document.getElementById('admin-pw').value;
+            const confirmPw = document.getElementById('admin-pw-confirm').value;
+            if (!pw || pw.length < 4) { showToast('Password must be at least 4 chars', 'error'); return; }
+            if (pw !== confirmPw) { showToast('Passwords do not match', 'error'); return; }
+            const resp = await fetch('/api/users/set-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: pw }) });
+            if (resp.ok) { showToast('Password set', 'success'); modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); fetchUsers(); }
+            else { showToast('Failed to set password', 'error'); }
+        });
+
+        function toggleStatus(username) {
+            fetch('/api/users/toggle-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            }).then(() => fetchUsers());
+        }
+
+        function toggleRole(username) {
+            fetch('/api/users/toggle-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            }).then(() => fetchUsers());
+        }
+
+        function deleteUser(username) {
+            if (confirm('Are you sure you want to delete ' + username + '?')) {
+                fetch('/api/users/' + username, {
+                    method: 'DELETE'
+                }).then(() => fetchUsers());
+            }
+        }
+
+        fetchUsers(); // Initial load
+    </script>
+</body>
+</html>

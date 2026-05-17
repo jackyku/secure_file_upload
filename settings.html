@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Settings — Admin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .card { background:#fff; padding:16px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); margin-bottom:16px; }
+    .iconless-input { height:36px; padding:8px 12px; border-radius:8px; border:1px solid #e6e9ee; }
+  </style>
+    <script src="/branding.js"></script>
+</head>
+<body>
+  <div class="container">
+    <a href="/admin.html"><i class="fas fa-arrow-left"></i> Back to User Management</a>
+    <hr>
+
+    <h1><i class="fas fa-cog"></i> Settings</h1>
+
+    <h2 id="policy"><i class="fas fa-shield-alt"></i> Password Policy</h2>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; gap:12px; align-items:center;">
+        <div style="flex:1;">
+          <label>Min length</label>
+          <input id="policy-minlength" type="number" class="iconless-input" value="4" style="width:120px;" min="0">
+        </div>
+        <div>
+          <label style="display:block">Require number</label>
+          <input id="policy-number" type="checkbox">
+        </div>
+        <div>
+          <label style="display:block">Require special</label>
+          <input id="policy-special" type="checkbox">
+        </div>
+        <div style="margin-left:auto;">
+          <button id="save-policy" class="save-btn">Save Policy</button>
+        </div>
+      </div>
+    </div>
+
+    <h2><i class="fas fa-shield-alt"></i> Inactivity Policy</h2>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; gap:12px; align-items:center;">
+        <div>
+          <label>Inactive after (days)</label>
+          <input id="inactivity-days" type="number" class="iconless-input" value="30" style="width:120px;" min="0">
+        </div>
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+          <button id="save-inactivity" class="save-btn">Save Policy</button>
+          <button id="run-inactivity-dry" class="save-btn">Run Dry-Run</button>
+          <button id="run-inactivity" class="danger">Run Cleanup</button>
+        </div>
+      </div>
+      <div id="inactivity-result" style="margin-top:12px; max-height:200px; overflow:auto; font-family:monospace; font-size:13px;"></div>
+    </div>
+
+    <h2><i class="fas fa-paint-brush"></i> Whitelabel / Branding</h2>
+    <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+            <div style="flex:1;min-width:220px;">
+                <label style="display:block;font-weight:600;margin-bottom:6px;">Company Name</label>
+                <input id="brand-name" type="text" class="iconless-input" placeholder="e.g. Acme Corp" style="width:100%;margin-bottom:12px;">
+                <label style="display:block;font-weight:600;margin-bottom:6px;">Company Logo</label>
+                <input id="brand-logo-file" type="file" accept="image/*" style="display:none;" onchange="onLogoFileChange(event)">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button class="save-btn" onclick="document.getElementById('brand-logo-file').click()"><i class="fas fa-image"></i> Choose Image</button>
+                    <button class="save-btn" style="background:linear-gradient(90deg,#94a3b8,#64748b);" onclick="clearLogo()"><i class="fas fa-times"></i> Clear Logo</button>
+                </div>
+                <p id="brand-logo-name" style="font-size:12px;color:var(--muted);margin-top:6px;"></p>
+            </div>
+            <div style="flex:0 0 auto;text-align:center;">
+                <label style="display:block;font-weight:600;margin-bottom:8px;">Preview</label>
+                <div id="brand-preview" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#f8fafc;border-radius:10px;border:1px solid var(--border);min-width:200px;min-height:56px;">
+                    <img id="brand-logo-preview" src="" alt="" style="height:40px;object-fit:contain;display:none;">
+                    <span id="brand-name-preview" style="font-weight:700;font-size:16px;"></span>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+            <button id="save-branding" class="save-btn"><i class="fas fa-save"></i> Save Branding</button>
+        </div>
+    </div>
+
+    <h2><i class="fas fa-clipboard-list"></i> Audit Log</h2>
+    <div class="card" style="margin-bottom:24px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <button id="refresh-audit" class="save-btn">Refresh</button>
+        <input id="audit-filter" class="iconless-input" placeholder="Filter (actor/action/target)" style="width:240px;">
+        <select id="audit-limit" style="width:120px;" class="iconless-input">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="250">250</option>
+        </select>
+      </div>
+      <div style="overflow:auto; max-height:320px;">
+        <table id="audit-table">
+          <thead>
+            <tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr>
+          </thead>
+          <tbody id="audit-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    // Minimal toast util (copied from admin)
+    function showToast(message, type = 'info', timeout = 3000) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const t = document.createElement('div');
+      t.className = `toast ${type}`;
+      t.textContent = message;
+      container.appendChild(t);
+      requestAnimationFrame(() => t.classList.add('show'));
+      setTimeout(() => {
+        t.classList.remove('show');
+        setTimeout(() => container.removeChild(t), 220);
+      }, timeout);
+    }
+
+    // Policy handlers (copied/adjusted from admin.html)
+    async function loadPolicy() {
+      const resp = await fetch('/api/admin/settings');
+      if (!resp.ok) return;
+      const s = await resp.json();
+      const policy = s.password_policy || { minLength: 4, requireNumber: false, requireSpecial: false };
+      document.getElementById('policy-minlength').value = policy.minLength;
+      document.getElementById('policy-number').checked = !!policy.requireNumber;
+      document.getElementById('policy-special').checked = !!policy.requireSpecial;
+    }
+
+    document.getElementById('save-policy').addEventListener('click', async () => {
+      const policy = {
+        minLength: parseInt(document.getElementById('policy-minlength').value, 10) || 4,
+        requireNumber: !!document.getElementById('policy-number').checked,
+        requireSpecial: !!document.getElementById('policy-special').checked
+      };
+      const resp = await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password_policy: policy }) });
+      if (resp.ok) { showToast('Policy saved', 'success'); } else { showToast('Failed to save policy', 'error'); }
+    });
+
+    // Inactivity handlers (copied)
+    async function loadInactivity() {
+      try {
+        const resp = await fetch('/api/admin/inactivity');
+        if (!resp.ok) return;
+        const j = await resp.json();
+        document.getElementById('inactivity-days').value = parseInt(j.inactivity_days || 30, 10);
+      } catch (e) {
+        console.error('loadInactivity error', e);
+      }
+    }
+
+    document.getElementById('save-inactivity').addEventListener('click', async () => {
+      const days = parseInt(document.getElementById('inactivity-days').value, 10);
+      if (Number.isNaN(days) || days < 0) { showToast('Invalid days value', 'error'); return; }
+      const resp = await fetch('/api/admin/inactivity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inactivity_days: days })});
+      if (resp.ok) { showToast('Inactivity policy saved', 'success'); loadInactivity(); } else { showToast('Failed to save inactivity policy', 'error'); }
+    });
+
+    async function runInactivity(dryRun = true) {
+      try {
+        const resp = await fetch('/api/admin/run-inactivity-cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun })});
+        if (!resp.ok) {
+          showToast('Cleanup failed: ' + resp.status, 'error');
+          return;
+        }
+        const result = await resp.json();
+        const el = document.getElementById('inactivity-result');
+        el.textContent = JSON.stringify(result, null, 2);
+        showToast('Cleanup completed (see results)', 'success', 4000);
+      } catch (e) {
+        console.error('runInactivity error', e);
+        showToast('Cleanup error', 'error');
+      }
+    }
+
+    document.getElementById('run-inactivity-dry').addEventListener('click', () => runInactivity(true));
+    document.getElementById('run-inactivity').addEventListener('click', () => {
+      if (!confirm('This will permanently delete inactive non-admin users and their files. Proceed?')) return;
+      runInactivity(false);
+    });
+
+    // Audit handlers (copied)
+    async function loadAudit() {
+      const limit = parseInt(document.getElementById('audit-limit').value, 10);
+      try {
+        const qVal = encodeURIComponent((document.getElementById('audit-filter') && document.getElementById('audit-filter').value) || '');
+        const resp = await fetch('/api/admin/audit?limit=' + limit + (qVal ? '&q=' + qVal : ''));
+        if (!resp.ok) { showToast('Failed to load audit (' + resp.status + ')', 'error'); return; }
+
+        const ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+            showToast('Unexpected response from server — you may need to re-login.', 'error');
+            document.getElementById('audit-body').innerHTML = '<tr><td colspan="5">Not available (unexpected response)</td></tr>';
+            return;
+        }
+
+        let rows;
+        try { rows = await resp.json(); } catch (e) {
+            console.error('Failed to parse audit JSON', e);
+            showToast('Failed to parse audit data', 'error');
+            return;
+        }
+
+        const tbody = document.getElementById('audit-body');
+        tbody.innerHTML = '';
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">No audit entries.</td></tr>';
+            return;
+        }
+        rows.forEach(r => {
+            const tr = document.createElement('tr');
+            let ts = Number(r.ts);
+            if (ts > 1e14) { ts = Math.floor(ts / 1e6); } else if (ts > 1e11) { ts = Math.floor(ts / 1e3); }
+            const dateObj = new Date(ts);
+            const d = isNaN(dateObj.getTime()) ? 'Invalid Date' : dateObj.toLocaleString();
+            tr.innerHTML = `<td>${d}</td><td>${r.actor}</td><td>${r.action}</td><td>${r.target}</td><td>${r.details}</td>`;
+            tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error('loadAudit error', e);
+        showToast('Failed to load audit', 'error');
+      }
+    }
+
+    document.getElementById('refresh-audit').addEventListener('click', loadAudit);
+    document.getElementById('audit-limit').addEventListener('change', loadAudit);
+    document.getElementById('audit-filter').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAudit(); });
+
+    // ── Branding ──────────────────────────────────────────────────────────
+    let _pendingLogo = undefined; // undefined = not changed; '' = cleared; 'data:...' = new image
+
+    async function loadBranding() {
+        try {
+            const resp = await fetch('/api/branding');
+            if (!resp.ok) return;
+            const b = await resp.json();
+            document.getElementById('brand-name').value = b.name || '';
+            document.getElementById('brand-name-preview').textContent = b.name || '';
+            if (b.logo) {
+                const img = document.getElementById('brand-logo-preview');
+                img.src = b.logo; img.style.display = 'inline-block';
+                document.getElementById('brand-logo-name').textContent = 'Current logo loaded';
+            }
+        } catch (e) {}
+    }
+
+    function onLogoFileChange(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (file.size > 512 * 1024) { showToast('Logo must be under 512 KB', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+            _pendingLogo = e.target.result;
+            const img = document.getElementById('brand-logo-preview');
+            img.src = _pendingLogo; img.style.display = 'inline-block';
+            document.getElementById('brand-logo-name').textContent = file.name;
+            document.getElementById('brand-name-preview').textContent = document.getElementById('brand-name').value;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function clearLogo() {
+        _pendingLogo = '';
+        const img = document.getElementById('brand-logo-preview');
+        img.src = ''; img.style.display = 'none';
+        document.getElementById('brand-logo-name').textContent = 'Logo cleared (save to apply)';
+        document.getElementById('brand-logo-file').value = '';
+    }
+
+    document.getElementById('brand-name').addEventListener('input', () => {
+        document.getElementById('brand-name-preview').textContent = document.getElementById('brand-name').value;
+    });
+
+    document.getElementById('save-branding').addEventListener('click', async () => {
+        const name = document.getElementById('brand-name').value.trim();
+        const payload = { name };
+        if (_pendingLogo !== undefined) payload.logo = _pendingLogo;
+        try {
+            const resp = await fetch('/api/admin/branding', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (resp.ok) { showToast('Branding saved', 'success'); _pendingLogo = undefined; }
+            else showToast('Failed to save branding', 'error');
+        } catch (e) { showToast('Error saving branding', 'error'); }
+    });
+
+    // Initial load
+    loadPolicy();
+    loadInactivity();
+    loadAudit();
+    loadBranding();
+  </script>
+</body>
+</html>

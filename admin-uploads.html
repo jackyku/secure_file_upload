@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin — Active Uploads</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        table { width:100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+        .danger { background:#ff6b6b; color:white; padding:6px 10px; border-radius:6px; border:none; }
+    </style>
+    <script src="/branding.js"></script>
+</head>
+<body>
+    <div class="container">
+        <a href="/admin.html"><i class="fas fa-arrow-left"></i> Back to Admin</a>
+        <hr>
+        <h1>Active Resumable Uploads</h1>
+        <div id="uploads-container">Loading…</div>
+    </div>
+
+    <script>
+        async function fetchUploads() {
+            const resp = await fetch('/api/admin/uploads');
+            if (!resp.ok) {
+                document.getElementById('uploads-container').textContent = 'Failed to load uploads.';
+                return;
+            }
+            const data = await resp.json();
+            renderUploads(data);
+        }
+
+        function renderUploads(list) {
+            const container = document.getElementById('uploads-container');
+            if (!list || list.length === 0) {
+                container.innerHTML = '<p>No active resumable uploads.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>User</th><th>Upload ID</th><th>File</th><th>Progress</th><th>Size</th><th>Age</th><th>Action</th></tr></thead><tbody>';
+            list.forEach(u => {
+                const pct = u.totalChunks ? Math.round((u.uploadedCount / u.totalChunks) * 100) : 0;
+                const sizeMB = (u.totalBytes / (1024*1024)).toFixed(2) + ' MB';
+                const age = Math.round((Date.now() - u.mtime) / 1000 / 60) + ' min';
+                html += `<tr>
+                    <td>${u.username}</td>
+                    <td style="font-family:monospace">${u.uploadId}</td>
+                    <td>${u.filename}</td>
+                    <td>${pct}% (${u.uploadedCount}/${u.totalChunks})</td>
+                    <td>${sizeMB}</td>
+                    <td>${age}</td>
+                    <td><button class="danger" onclick="abortUpload('${u.username}','${u.uploadId}')">Abort</button></td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function abortUpload(username, uploadId) {
+            if (!confirm('Abort upload ' + uploadId + ' for ' + username + '?')) return;
+            const resp = await fetch('/api/admin/uploads/abort', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, uploadId })
+            });
+            if (resp.ok) {
+                fetchUploads();
+            } else {
+                alert('Failed to abort');
+            }
+        }
+
+        fetchUploads();
+        setInterval(fetchUploads, 15000); // refresh every 15s
+    </script>
+</body>
+</html>

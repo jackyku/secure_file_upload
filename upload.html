@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <!-- Preview libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        /* Preview modal overrides */
+        #previewModal .modal-content {
+            max-width: 920px;
+            width: 96vw;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
+        }
+        .preview-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            gap: 12px;
+        }
+        .preview-header h3 {
+            margin: 0;
+            font-size: 15px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .preview-close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--muted);
+            padding: 4px 8px;
+            border-radius: 6px;
+            box-shadow: none;
+            min-width: unset;
+        }
+        .preview-close-btn:hover { background: var(--border); transform: none; }
+        #previewContent {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+        #previewContent img { max-width: 100%; display: block; margin: 0 auto; border-radius: 8px; }
+        #previewContent pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; font-family: 'Fira Mono', monospace; margin: 0; }
+        #previewContent iframe { width: 100%; height: 65vh; border: none; }
+        #previewContent table { font-size: 13px; }
+        .pptx-slide { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; background: #fff; }
+        .pptx-slide h4 { margin: 0 0 8px 0; font-size: 13px; color: var(--muted); }
+        .preview-spinner { text-align: center; padding: 40px; color: var(--muted); }
+        /* File list item */
+        .file-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 10px; }
+        .file-item:last-child { border-bottom: none; }
+        .file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+        .btn-sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+        .btn-preview { background: linear-gradient(90deg,#6366f1,#8b5cf6); }
+        .btn-share { background: linear-gradient(90deg,#0ea5e9,#06b6d4); }
+        /* Share modal */
+        #shareModal .modal-content { max-width: 540px; width: 96vw; }
+        .share-link-box { display: flex; gap: 8px; margin-top: 6px; }
+        .share-link-box input { flex: 1; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
+        .share-list-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .share-list-item:last-child { border-bottom: none; }
+        .share-badge { font-size: 11px; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+        .badge-view { background: #dbeafe; color: #1d4ed8; }
+        .badge-edit { background: #dcfce7; color: #15803d; }
+        .badge-pw { background: #fef3c7; color: #92400e; }
+    </style>
+    <script src="/branding.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+        <div id="header-section"></div>
+        <hr>
+        <div id="quota-section"></div>
+
+        <h2><i class="fas fa-upload"></i> Upload a File</h2>
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <input type="file" name="file" id="fileInput" required>
+            </div>
+            <button type="submit"><i class="fas fa-cloud-upload-alt"></i> Upload</button>
+            <div id="upload-progress-container">
+                <div id="upload-progress-bar"></div>
+            </div>
+        </form>
+
+        <hr>
+        <div id="file-section"></div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content card">
+            <div class="preview-header">
+                <h3 id="previewTitle"></h3>
+                <button class="preview-close-btn" onclick="closePreview()" title="Close">✕</button>
+            </div>
+            <div id="previewContent"></div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content card">
+            <h3><i class="fas fa-share-alt"></i> Share File: <span id="shareFilename" style="font-weight:400;"></span></h3>
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:600;margin-bottom:6px;">Access mode</label>
+                <div style="display:flex;gap:10px;">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="radio" name="shareMode" value="view" checked> View-only
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="radio" name="shareMode" value="edit"> View + Download
+                    </label>
+                </div>
+            </div>
+            <div class="modal-row">
+                <label style="font-weight:600;">Password (optional)</label>
+                <input id="sharePassword" type="password" placeholder="Leave blank for no password" style="width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);">
+            </div>
+            <div class="modal-row">
+                <label style="font-weight:600;">Expires in (hours, blank = never)</label>
+                <input id="shareExpiry" type="number" min="1" placeholder="e.g. 24" style="width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);">
+            </div>
+
+            <div id="shareLinkSection" style="display:none;margin-top:10px;">
+                <label style="font-weight:600;">Share link</label>
+                <div class="share-link-box">
+                    <input id="shareLinkInput" type="text" readonly>
+                    <button class="btn-sm" onclick="copyShareLink()"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top:14px;">
+                <button class="save-btn" onclick="closeShareModal()">Close</button>
+                <button class="save-btn" id="createShareBtn" onclick="createShare()"><i class="fas fa-link"></i> Create Link</button>
+            </div>
+
+            <div id="existingShares" style="margin-top:16px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // ── Toast ──────────────────────────────────────────────────────────────
+        function showToast(message, type = 'info', timeout = 3000) {
+            const container = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.textContent = message;
+            container.appendChild(t);
+            requestAnimationFrame(() => t.classList.add('show'));
+            setTimeout(() => { t.classList.remove('show'); setTimeout(() => container.removeChild(t), 220); }, timeout);
+        }
+
+        let currentUser;
+        let _shareFilename = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/me')
+                .then(r => { if (!r.ok) throw new Error('Not logged in'); return r.json(); })
+                .then(user => {
+                    currentUser = user;
+                    renderHeader(user);
+                    renderFileSection(user);
+                })
+                .catch(() => window.location.href = '/login.html');
+
+            // Chunked upload
+            document.getElementById('uploadForm').addEventListener('submit', function(event) {
+                event.preventDefault();
+                const fileInput = document.getElementById('fileInput');
+                if (!fileInput.files.length) { alert('Please select a file.'); return; }
+                const file = fileInput.files[0];
+                const progressBarContainer = document.getElementById('upload-progress-container');
+                const progressBar = document.getElementById('upload-progress-bar');
+                const chunkSize = parseInt(localStorage.getItem('chunkSize')) || (8 * 1024 * 1024);
+                const maxRetries = 3, concurrency = 3;
+
+                async function initiate() {
+                    const resp = await fetch('/upload/initiate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, totalSize: file.size, chunkSize }) });
+                    if (!resp.ok) { const j = await resp.json().catch(() => ({})); throw new Error(j.error || 'Failed to initiate'); }
+                    return resp.json();
+                }
+                async function getStatus(uploadId) {
+                    const resp = await fetch(`/upload/status?uploadId=${encodeURIComponent(uploadId)}`);
+                    return resp.ok ? resp.json() : null;
+                }
+                async function uploadChunk(uploadId, index, blob, attempt = 0) {
+                    const fd = new FormData();
+                    fd.append('uploadId', uploadId); fd.append('chunkIndex', String(index)); fd.append('chunk', blob, file.name + '.part.' + index);
+                    try { const r = await fetch('/upload/chunk', { method: 'POST', body: fd }); if (!r.ok) throw new Error('Chunk failed'); return true; }
+                    catch (e) { if (attempt < maxRetries) return uploadChunk(uploadId, index, blob, attempt + 1); throw e; }
+                }
+                async function completeUpload(uploadId) {
+                    const resp = await fetch('/upload/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }) });
+                    if (!resp.ok) { const j = await resp.json().catch(() => ({})); throw new Error(j.error || 'Complete failed'); }
+                    return resp.json();
+                }
+
+                (async () => {
+                    try {
+                        progressBarContainer.style.display = 'block';
+                        progressBar.style.width = '0%';
+                        const init = await initiate();
+                        const uploadId = init.uploadId;
+                        const serverChunkSize = init.chunkSize || chunkSize;
+                        const status = await getStatus(uploadId);
+                        const uploadedSet = new Set((status && status.uploaded) || []);
+                        const totalChunks = Math.ceil(file.size / serverChunkSize);
+                        let uploadedBytes = Math.min(uploadedSet.size * serverChunkSize, file.size);
+                        const queue = [];
+                        for (let i = 0; i < totalChunks; i++) {
+                            if (uploadedSet.has(i)) continue;
+                            const start = i * serverChunkSize, end = Math.min(file.size, start + serverChunkSize);
+                            queue.push({ index: i, blob: file.slice(start, end), size: end - start });
+                        }
+                        async function worker() {
+                            while (queue.length > 0) {
+                                const item = queue.shift();
+                                await uploadChunk(uploadId, item.index, item.blob);
+                                uploadedBytes += item.size;
+                                const pct = Math.round((uploadedBytes / file.size) * 100);
+                                progressBar.style.width = pct + '%'; progressBar.textContent = pct + '%';
+                            }
+                        }
+                        const workers = [];
+                        for (let w = 0; w < concurrency; w++) workers.push(worker());
+                        await Promise.all(workers);
+                        await completeUpload(uploadId);
+                        window.location.reload();
+                    } catch (e) {
+                        alert('Upload error: ' + (e && e.message));
+                        progressBarContainer.style.display = 'none';
+                    }
+                })();
+            });
+        });
+
+        // ── Header ────────────────────────────────────────────────────────────
+        function renderHeader(user) {
+            const headerSection = document.getElementById('header-section');
+            let adminLinks = user.role === 'admin'
+                ? `<a href="/admin.html" style="margin-left:10px;"><button><i class="fas fa-users-cog"></i> User Panel</button></a>` : '';
+            headerSection.innerHTML = `
+                <h2>Welcome, ${user.username}!</h2>
+                <p>You are logged in as: <strong>${user.role}</strong></p>
+                <form action="/logout" method="post" style="display:inline-block;">
+                    <button type="submit" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                </form>
+                <button style="margin-left:8px;" onclick="openChangePasswordModal()"><i class="fas fa-key"></i> Change Password</button>
+                <a href="/shares.html" style="margin-left:8px;"><button><i class="fas fa-share-alt"></i> My Shares</button></a>
+                ${adminLinks}
+            `;
+            document.body.insertAdjacentHTML('beforeend', `
+            <div id="changePwdModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+                <div class="modal-content card">
+                    <h3>Change Password</h3>
+                    <div class="modal-row"><input id="cp-current" type="password" placeholder="Current password"></div>
+                    <div class="modal-row"><input id="cp-new" type="password" placeholder="New password (min 4 chars)"></div>
+                    <div class="modal-row"><input id="cp-confirm" type="password" placeholder="Confirm new password"></div>
+                    <div class="modal-actions">
+                        <button id="cp-cancel" class="save-btn" type="button">Cancel</button>
+                        <button id="cp-submit" class="save-btn" type="button">Change</button>
+                    </div>
+                </div>
+            </div>`);
+        }
+
+        // ── File section ──────────────────────────────────────────────────────
+        function renderFileSection(user) {
+            const fileSection = document.getElementById('file-section');
+            const quotaSection = document.getElementById('quota-section');
+            if (user.role === 'admin') {
+                fileSection.innerHTML = `<h2><i class="fas fa-tools"></i> Admin Tools</h2>
+                    <a href="/admin-files.html"><button><i class="fas fa-folder-open"></i> View All User Files</button></a>`;
+            } else {
+                const usageMB = (user.usage / (1024 * 1024)).toFixed(2);
+                quotaSection.innerHTML = `<h3><i class="fas fa-hdd"></i> Quota Usage</h3>
+                    <p>${usageMB} MB / ${user.quota} GB used.</p>
+                    <progress value="${user.usage}" max="${user.quota * 1024 * 1024 * 1024}" style="width:100%;"></progress>`;
+                fetchAndDisplayUserFiles(user);
+            }
+        }
+
+        function fileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const map = { pdf: 'fa-file-pdf', doc: 'fa-file-word', docx: 'fa-file-word', xls: 'fa-file-excel', xlsx: 'fa-file-excel', ppt: 'fa-file-powerpoint', pptx: 'fa-file-powerpoint', zip: 'fa-file-archive', rar: 'fa-file-archive', jpg: 'fa-file-image', jpeg: 'fa-file-image', png: 'fa-file-image', gif: 'fa-file-image', webp: 'fa-file-image', svg: 'fa-file-image', mp4: 'fa-file-video', mov: 'fa-file-video', mp3: 'fa-file-audio', txt: 'fa-file-alt', md: 'fa-file-alt', csv: 'fa-file-csv', json: 'fa-file-code' };
+            return `fas ${map[ext] || 'fa-file'}`;
+        }
+
+        function isPreviewable(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            return ['txt','md','log','csv','json','xml','html','htm','css','js','ts','py','sh','yaml','yml','ini','conf','docx','xlsx','xls','pptx','jpg','jpeg','png','gif','webp','svg','bmp','pdf'].includes(ext);
+        }
+
+        function fetchAndDisplayUserFiles(user) {
+            const fileSection = document.getElementById('file-section');
+            fetch('/api/uploads')
+                .then(r => r.json())
+                .then(data => {
+                    fileSection.innerHTML = '<h2><i class="fas fa-file-alt"></i> Your Uploaded Files</h2>';
+                    if (!data.files || !data.files.length) {
+                        fileSection.innerHTML += '<p>You have no uploaded files.</p>';
+                        return;
+                    }
+                    const list = document.createElement('div');
+                    data.files.forEach(file => {
+                        const item = document.createElement('div');
+                        item.className = 'file-item';
+                        const canPreview = isPreviewable(file);
+                        item.innerHTML = `
+                            <i class="${fileIcon(file)}" style="color:var(--accent-1);font-size:18px;flex-shrink:0;"></i>
+                            <span class="file-name" title="${file}">
+                                <a href="/uploads/${user.username}/${encodeURIComponent(file)}" target="_blank">${file}</a>
+                            </span>
+                            <div class="file-actions">
+                                ${canPreview ? `<button class="btn-sm btn-preview" onclick="openPreview('${user.username}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-eye"></i> Preview</button>` : ''}
+                                <button class="btn-sm btn-share" onclick="openShareModal('${file.replace(/'/g,"\\'")}')"><i class="fas fa-share-alt"></i> Share</button>
+                                <button class="btn-sm danger" onclick="deleteFile('${user.username}','${file.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+                            </div>`;
+                        list.appendChild(item);
+                    });
+                    fileSection.appendChild(list);
+                });
+        }
+
+        function deleteFile(username, filename) {
+            if (!confirm(`Delete ${filename}?`)) return;
+            fetch(`/api/files/${username}/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+                .then(r => { if (r.ok) window.location.reload(); else alert('Error deleting file.'); });
+        }
+
+        // ── Preview ───────────────────────────────────────────────────────────
+        async function openPreview(username, filename) {
+            const modal = document.getElementById('previewModal');
+            document.getElementById('previewTitle').textContent = filename;
+            document.getElementById('previewContent').innerHTML = `<div class="preview-spinner"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Loading preview…</p></div>`;
+            modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
+            const url = `/uploads/${username}/${encodeURIComponent(filename)}`;
+            const ext = filename.split('.').pop().toLowerCase();
+            const contentEl = document.getElementById('previewContent');
+            try {
+                if (['jpg','jpeg','png','gif','webp','svg','bmp'].includes(ext)) {
+                    contentEl.innerHTML = `<img src="${url}" alt="${filename}">`;
+                } else if (ext === 'pdf') {
+                    contentEl.innerHTML = `<iframe src="${url}"></iframe>`;
+                } else if (['mp4','webm','ogg'].includes(ext)) {
+                    contentEl.innerHTML = `<video controls style="max-width:100%;"><source src="${url}"></video>`;
+                } else if (ext === 'docx') {
+                    const buf = await fetch(url).then(r => r.arrayBuffer());
+                    const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+                    contentEl.innerHTML = `<div style="font-family:Georgia,serif;line-height:1.7;max-width:720px;margin:0 auto;">${result.value}</div>`;
+                } else if (['xlsx','xls'].includes(ext)) {
+                    const buf = await fetch(url).then(r => r.arrayBuffer());
+                    const wb = XLSX.read(buf, { type: 'array' });
+                    let html = '';
+                    wb.SheetNames.forEach(name => {
+                        const ws = wb.Sheets[name];
+                        html += `<h4 style="margin:12px 0 6px;">${name}</h4>` + XLSX.utils.sheet_to_html(ws, { editable: false });
+                    });
+                    contentEl.innerHTML = `<div style="overflow:auto;">${html}</div>`;
+                } else if (ext === 'pptx') {
+                    const buf = await fetch(url).then(r => r.arrayBuffer());
+                    const zip = await JSZip.loadAsync(buf);
+                    const slideFiles = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort((a,b) => {
+                        const na = parseInt(a.match(/slide(\d+)/)[1]), nb = parseInt(b.match(/slide(\d+)/)[1]);
+                        return na - nb;
+                    });
+                    if (!slideFiles.length) { contentEl.innerHTML = '<p>No slides found.</p>'; return; }
+                    let html = '';
+                    for (const sf of slideFiles) {
+                        const xmlStr = await zip.files[sf].async('string');
+                        const doc = new DOMParser().parseFromString(xmlStr, 'text/xml');
+                        const texts = Array.from(doc.querySelectorAll('a\\:t, t')).map(n => n.textContent).filter(t => t.trim());
+                        const num = sf.match(/slide(\d+)/)[1];
+                        html += `<div class="pptx-slide"><h4>Slide ${num}</h4><p>${texts.join(' ') || '<em>No text content</em>'}</p></div>`;
+                    }
+                    contentEl.innerHTML = html;
+                } else {
+                    // Text-based files
+                    const text = await fetch(url).then(r => {
+                        if (!r.ok) throw new Error('Failed to load file');
+                        return r.text();
+                    });
+                    contentEl.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+                }
+            } catch (e) {
+                contentEl.innerHTML = `<p style="color:#ef4444;">Preview failed: ${e.message}</p>`;
+            }
+        }
+
+        function closePreview() {
+            const modal = document.getElementById('previewModal');
+            modal.classList.remove('show'); modal.setAttribute('aria-hidden','true');
+            document.getElementById('previewContent').innerHTML = '';
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // ── Share modal ───────────────────────────────────────────────────────
+        function openShareModal(filename) {
+            _shareFilename = filename;
+            document.getElementById('shareFilename').textContent = filename;
+            document.getElementById('sharePassword').value = '';
+            document.getElementById('shareExpiry').value = '';
+            document.getElementById('shareLinkSection').style.display = 'none';
+            document.querySelector('input[name="shareMode"][value="view"]').checked = true;
+            const modal = document.getElementById('shareModal');
+            modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
+            loadExistingShares(filename);
+        }
+
+        function closeShareModal() {
+            document.getElementById('shareModal').classList.remove('show');
+            document.getElementById('shareModal').setAttribute('aria-hidden','true');
+            _shareFilename = null;
+        }
+
+        async function createShare() {
+            const filename = _shareFilename;
+            const password = document.getElementById('sharePassword').value;
+            const mode = document.querySelector('input[name="shareMode"]:checked').value;
+            const expiresHours = document.getElementById('shareExpiry').value;
+            try {
+                const resp = await fetch('/api/shares', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, password: password || undefined, mode, expiresHours: expiresHours || undefined })
+                });
+                if (!resp.ok) { const j = await resp.json().catch(() => ({})); showToast(j.error || 'Failed to create share', 'error'); return; }
+                const { url } = await resp.json();
+                const fullUrl = window.location.origin + url;
+                document.getElementById('shareLinkInput').value = fullUrl;
+                document.getElementById('shareLinkSection').style.display = 'block';
+                showToast('Share link created!', 'success');
+                loadExistingShares(filename);
+            } catch (e) {
+                showToast('Error creating share', 'error');
+            }
+        }
+
+        function copyShareLink() {
+            const input = document.getElementById('shareLinkInput');
+            input.select(); document.execCommand('copy');
+            showToast('Link copied!', 'success');
+        }
+
+        async function loadExistingShares(filename) {
+            const container = document.getElementById('existingShares');
+            try {
+                const resp = await fetch('/api/shares');
+                if (!resp.ok) return;
+                const shares = await resp.json();
+                const mine = shares.filter(s => s.filename === filename);
+                if (!mine.length) { container.innerHTML = ''; return; }
+                let html = `<h4 style="margin:0 0 8px;font-size:14px;">Existing links for this file</h4>`;
+                mine.forEach(s => {
+                    const expires = s.expires_at ? new Date(s.expires_at).toLocaleString() : 'Never';
+                    const url = window.location.origin + '/share/' + s.token;
+                    html += `<div class="share-list-item">
+                        <span class="share-badge ${s.mode === 'edit' ? 'badge-edit' : 'badge-view'}">${s.mode === 'edit' ? 'View+DL' : 'View'}</span>
+                        ${s.hasPassword ? '<span class="share-badge badge-pw"><i class="fas fa-lock" style="font-size:10px;"></i> Pwd</span>' : ''}
+                        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="${url}" target="_blank">${url}</a></span>
+                        <span style="color:var(--muted);font-size:11px;white-space:nowrap;">Exp: ${expires}</span>
+                        <button class="btn-sm danger" style="padding:4px 8px;" onclick="deleteShare('${s.token}','${filename.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            } catch (e) { container.innerHTML = ''; }
+        }
+
+        async function deleteShare(token, filename) {
+            if (!confirm('Delete this share link?')) return;
+            const resp = await fetch('/api/shares/' + token, { method: 'DELETE' });
+            if (resp.ok) { showToast('Share deleted', 'success'); loadExistingShares(filename); }
+            else showToast('Failed to delete share', 'error');
+        }
+
+        // ── Change password modal ──────────────────────────────────────────────
+        function openChangePasswordModal() {
+            const modal = document.getElementById('changePwdModal');
+            modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
+            ['cp-current','cp-new','cp-confirm'].forEach(id => document.getElementById(id).value = '');
+        }
+        function closeChangePasswordModal() {
+            const modal = document.getElementById('changePwdModal');
+            modal.classList.remove('show'); modal.setAttribute('aria-hidden','true');
+        }
+
+        document.addEventListener('click', e => {
+            if (e.target && e.target.id === 'cp-cancel') closeChangePasswordModal();
+        });
+        document.addEventListener('click', async e => {
+            if (e.target && e.target.id === 'cp-submit') {
+                const current = document.getElementById('cp-current').value;
+                const newPwd = document.getElementById('cp-new').value;
+                const confirm = document.getElementById('cp-confirm').value;
+                if (!current) { showToast('Enter current password', 'error'); return; }
+                if (!newPwd || newPwd.length < 4) { showToast('New password min 4 chars', 'error'); return; }
+                if (newPwd !== confirm) { showToast('Passwords do not match', 'error'); return; }
+                const resp = await fetch('/api/users/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: current, newPassword: newPwd }) });
+                if (resp.ok) { showToast('Password changed', 'success'); closeChangePasswordModal(); }
+                else { const j = await resp.json().catch(() => ({})); showToast('Failed: ' + (j.error || 'error'), 'error'); }
+            }
+        });
+
+        // Close modals on backdrop click
+        document.addEventListener('click', e => {
+            if (e.target === document.getElementById('previewModal')) closePreview();
+            if (e.target === document.getElementById('shareModal')) closeShareModal();
+        });
+    </script>
+</body>
+</html>

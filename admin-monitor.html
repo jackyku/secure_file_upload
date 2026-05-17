@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin — Monitor & Cleanup</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .stat { display:flex; gap:12px; align-items:center; margin-bottom:8px }
+        .stat b { min-width:140px }
+    </style>
+    <script src="/branding.js"></script>
+</head>
+<body>
+    <div class="container">
+        <a href="/admin.html"><i class="fas fa-arrow-left"></i> Back to Admin</a>
+        <hr>
+        <h1>Server Monitor & Cleanup</h1>
+        <div id="stats">Loading...</div>
+        <hr>
+        <h2>Cleanup Temporary Uploads</h2>
+        <div>
+            <label>Remove uploads older than: <input type="number" id="hours" value="24" class="iconless-input" style="width:96px; min-width:64px;"> hours</label>
+            <button id="cleanupBtn" style="margin-left:12px">Run Cleanup</button>
+        </div>
+        <div id="cleanupResult" style="margin-top:12px"></div>
+    </div>
+
+    <script>
+        async function fetchStats() {
+            const resp = await fetch('/api/admin/monitor');
+            if (!resp.ok) {
+                document.getElementById('stats').textContent = 'Failed to load stats.';
+                return;
+            }
+            const s = await resp.json();
+            document.getElementById('stats').innerHTML = `
+                <div class="stat"><b>Filesystem</b><span>${s.filesystem}</span></div>
+                <div class="stat"><b>Total</b><span>${(s.sizeKB/1024).toFixed(2)} MB</span></div>
+                <div class="stat"><b>Used</b><span>${(s.usedKB/1024).toFixed(2)} MB</span></div>
+                <div class="stat"><b>Available</b><span>${(s.availKB/1024).toFixed(2)} MB</span></div>
+                <div class="stat"><b>Usage</b><span>${s.percent}</span></div>
+                <div class="stat"><b>Temp Uploads Size</b><span>${(s.uploadsTmpSize/1024/1024).toFixed(2)} MB</span></div>
+                <div class="stat"><b>Uploads Size</b><span>${(s.uploadsSize/1024/1024).toFixed(2)} MB</span></div>
+            `;
+        }
+
+        document.getElementById('cleanupBtn').addEventListener('click', async () => {
+            const hours = parseInt(document.getElementById('hours').value, 10) || 24;
+            const resp = await fetch('/api/admin/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hours }) });
+            const el = document.getElementById('cleanupResult');
+            if (!resp.ok) {
+                el.textContent = 'Cleanup failed.';
+                return;
+            }
+            const j = await resp.json();
+            el.textContent = `Removed ${j.removed} uploads, freed ${(j.removedBytes/1024/1024).toFixed(2)} MB`;
+            fetchStats();
+        });
+
+        fetchStats();
+        setInterval(fetchStats, 30000);
+    </script>
+</body>
+</html>
